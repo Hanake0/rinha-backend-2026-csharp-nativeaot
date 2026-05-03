@@ -43,11 +43,12 @@
   - shared `searchd` pivot behind nginx
   - native AOT tcp L4 load balancer
   - class-aware exact fraud-count search
+  - raw socket HTTP API server
 - next candidate branch:
-  - lower-overhead HTTP server path to remove the remaining stack-visible transport cost
-  - direct raw-http API path to isolate Kestrel overhead on `/fraud-score`
-  - raw HTTP API server remains on the table because nginx is not the main gap
+  - algorithmic search-side cuts that preserve the exact `0 / 0` decision surface
+  - distance and candidate-pruning experiments only if they can be validated against the official evaluator
   - only revisit a custom LB if it is request-aware and it can prove a win under the same envelope
+  - use the new `900 req/s` short-screen harness to reject obvious stack regressions before spending a full `120s` compose run
 
 ## Current validated candidate shape
 
@@ -154,6 +155,16 @@
   - full stack stayed exact at `0 / 0` and landed at `p99 = 1.38 ms`, final `5859.90`
   - profile comparison was mixed across replicas and did not yield a decisive end-to-end improvement
   - kept as an experiment, not promoted
+- raw socket HTTP API branch:
+  - replaced the Kestrel request path with a custom HTTP/1.1 keep-alive socket server for `/ready`, `/fraud-score`, and profile endpoints
+  - first constrained compose run stayed exact at `0 / 0` but regressed to `p99 = 1.46 ms`, final `5834.92`
+  - a follow-up pass removed the per-request body copy and ASCII string parsing, but regressed further to `p99 = 1.79 ms`, final `5747.19`
+  - rejected because the custom server underperformed Kestrel on the only metric that matters: end-to-end constrained stack latency
+- request-aware custom LB revival:
+  - replaced the earlier connection-level native proxy with per-request round-robin and persistent backend connections
+  - the new `scripts/benchmark-quick-compose.ps1` harness now screens at `900 req/s` for `12s`, not at a low-rate ramp
+  - current quick-screen anchor: nginx baseline `43.83 ms`, request-aware custom LB over backend TCP `226.98 ms`, both exact at `0 / 0`
+  - backend UDS validation is temporarily blocked by a readiness/startup issue in `docker-compose.native-lb-uds.yml`; fix that before treating UDS results as comparable at the new short-screen pressure
 
 ## Latest profiling anchors
 
@@ -189,6 +200,8 @@
 - `benchmarks/results/stack/2026-05-03-native-lb-summary.md`
 - `benchmarks/results/stack/2026-05-03-class-aware-summary.md`
 - `benchmarks/results/stack/2026-05-03-shared-data-volume-summary.md`
+- `benchmarks/results/stack/2026-05-03-raw-http-summary.md`
+- `benchmarks/results/stack/2026-05-03-request-aware-lb-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-noavx.json`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-partition-on.json`

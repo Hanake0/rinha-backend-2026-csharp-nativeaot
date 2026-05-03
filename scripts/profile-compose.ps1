@@ -10,6 +10,7 @@ param(
 	[string]$HttpIoQueueCount = "",
 	[string]$HttpNoDelay = "",
 	[string]$HttpParserMode = "Manual",
+	[string]$HttpServerMode = "Kestrel",
 	[int]$BeamLevel1 = 8,
 	[int]$BeamLevel2 = 128,
 	[string]$SearchIndexKind = "HierarchicalBeamIvf",
@@ -21,7 +22,14 @@ param(
 	[double]$LbCpus = 0.15,
 	[double]$ApiCpus = 0.425,
 	[string]$LbMemLimit = "48m",
-	[string]$ApiMemLimit = "151m"
+	[string]$ApiMemLimit = "151m",
+	[int]$K6StartRate = 1,
+	[int]$K6TargetRate = 900,
+	[int]$K6PreAllocatedVUs = 100,
+	[int]$K6MaxVUs = 250,
+	[string]$K6StageDuration = "120s",
+	[string]$K6GracefulStop = "10s",
+	[switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -62,6 +70,21 @@ New-Item -ItemType Directory -Path (Join-Path $k6Workdir "test") -Force | Out-Nu
 $patchedScript = (Get-Content $testScriptFullPath -Raw).Replace(
 	"http://localhost:9999/fraud-score",
 	"http://lb:9999/fraud-score")
+$patchedScript = $patchedScript.Replace(
+	"startRate: 1,",
+	"startRate: __ENV.K6_START_RATE ? Number(__ENV.K6_START_RATE) : 1,")
+$patchedScript = $patchedScript.Replace(
+	"preAllocatedVUs: 100,",
+	"preAllocatedVUs: __ENV.K6_PRE_ALLOCATED_VUS ? Number(__ENV.K6_PRE_ALLOCATED_VUS) : 100,")
+$patchedScript = $patchedScript.Replace(
+	"maxVUs: 250,",
+	"maxVUs: __ENV.K6_MAX_VUS ? Number(__ENV.K6_MAX_VUS) : 250,")
+$patchedScript = $patchedScript.Replace(
+	"gracefulStop: '10s',",
+	"gracefulStop: __ENV.K6_GRACEFUL_STOP || '10s',")
+$patchedScript = $patchedScript.Replace(
+	"{ duration: '120s', target: 900 },",
+	"{ duration: __ENV.K6_STAGE_DURATION || '120s', target: __ENV.K6_TARGET_RATE ? Number(__ENV.K6_TARGET_RATE) : 900 },")
 Set-Content -LiteralPath $patchedScriptPath -Value $patchedScript -NoNewline
 Copy-Item -LiteralPath $testDataFullPath -Destination $patchedDataPath -Force
 
@@ -81,6 +104,7 @@ $env:HTTP_INLINE_SCHEDULING = $HttpInlineScheduling
 $env:HTTP_IO_QUEUE_COUNT = $HttpIoQueueCount
 $env:HTTP_NO_DELAY = $HttpNoDelay
 $env:HTTP_PARSER_MODE = $HttpParserMode
+$env:HTTP_SERVER_MODE = $HttpServerMode
 $env:TOP_K = $TopK.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 $env:LB_CPUS = $LbCpus.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 $env:API_CPUS = $ApiCpus.ToString([System.Globalization.CultureInfo]::InvariantCulture)
@@ -90,7 +114,12 @@ $env:LB_MEM_LIMIT_DEPLOY = $LbMemLimit.ToUpperInvariant()
 $env:API_MEM_LIMIT_DEPLOY = $ApiMemLimit.ToUpperInvariant()
 
 docker compose -f $composePath -f $profileComposePath down --remove-orphans
-docker compose -f $composePath -f $profileComposePath up -d --build
+
+if ($SkipBuild) {
+	docker compose -f $composePath -f $profileComposePath up -d
+} else {
+	docker compose -f $composePath -f $profileComposePath up -d --build
+}
 
 & (Join-Path $PSScriptRoot "wait-ready.ps1")
 
@@ -138,6 +167,12 @@ try {
 		"-v", "${k6Workdir}:/work",
 		"-w", "/work",
 		"-e", "K6_NO_USAGE_REPORT=true",
+		"-e", "K6_START_RATE=$K6StartRate",
+		"-e", "K6_TARGET_RATE=$K6TargetRate",
+		"-e", "K6_PRE_ALLOCATED_VUS=$K6PreAllocatedVUs",
+		"-e", "K6_MAX_VUS=$K6MaxVUs",
+		"-e", "K6_STAGE_DURATION=$K6StageDuration",
+		"-e", "K6_GRACEFUL_STOP=$K6GracefulStop",
 		"grafana/k6:latest",
 		"run",
 		"test.js"
