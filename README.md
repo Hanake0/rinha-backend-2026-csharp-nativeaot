@@ -18,8 +18,8 @@ Planning documents live outside this repo in [`../plans`](../plans/).
 - dataset artifact root: `./runtime-data`
 - search mode: `HierarchicalBeamIvf`
 - default search settings:
-  - `beamLevel1 = 10`
-  - `beamLevel2 = 32`
+  - `beamLevel1 = 8`
+  - `beamLevel2 = 48`
   - `rerankCount = 48`
   - `topK = 5`
   - `approvalThreshold = 0.6`
@@ -90,8 +90,8 @@ Official corpus evaluator:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\evaluate-official.ps1 `
   -ParseMode ServiceManual `
-  -BeamLevel1 10 `
-  -BeamLevel2 32 `
+  -BeamLevel1 8 `
+  -BeamLevel2 48 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6
@@ -100,10 +100,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\evaluate-official.ps1 `
 Evaluator grid sweep:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\tune-evaluator-grid.ps1 `
-  -ParseMode ServiceManual `
+powershell -ExecutionPolicy Bypass -File .\scripts\sweep-evaluator.ps1 `
+  -RuntimeDataDirs runtime-data `
   -BeamLevel1Values 6,8,10 `
-  -BeamLevel2Values 24,32 `
+  -BeamLevel2Values 48,64,96 `
   -RerankCountValues 48,64
 ```
 
@@ -111,8 +111,8 @@ Constrained full-stack benchmark:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\benchmark-official-compose.ps1 `
-  -BeamLevel1 10 `
-  -BeamLevel2 32 `
+  -BeamLevel1 8 `
+  -BeamLevel2 48 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6 `

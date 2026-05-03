@@ -4,11 +4,10 @@
 
 This file records the validated stack-level results after:
 
-- NativeAOT correctness fix for runtime config binding
 - search artifact retraining
-- LB CPU split tuning
-- socket transport tuning
-- HAProxy vs Nginx comparison
+- deeper evaluator frontier sweeps
+- constrained compose validation of the new frontier
+- request-stage profiling on the promoted baseline
 
 ## Chosen default
 
@@ -16,8 +15,8 @@ This file records the validated stack-level results after:
 - load balancer: `nginx:1.27-alpine`
 - dataset artifact: `runtime-data/`
 - search settings:
-  - `beamLevel1 = 10`
-  - `beamLevel2 = 32`
+  - `beamLevel1 = 8`
+  - `beamLevel2 = 48`
   - `rerankCount = 48`
   - `topK = 5`
   - `approvalThreshold = 0.6`
@@ -32,10 +31,10 @@ This file records the validated stack-level results after:
 
 ## Artifact provenance
 
-- source build directory promoted into `runtime-data/`: `runtime-data-512x32-s524k`
+- source build directory promoted into `runtime-data/`: `runtime-data-512x64-s524k`
 - hierarchical training:
   - `L1 = 512`
-  - `L2 per L1 = 32`
+  - `L2 per L1 = 64`
   - training sample size `524,288`
   - k-means iterations `12`
 
@@ -47,8 +46,8 @@ Command shape:
 powershell -ExecutionPolicy Bypass -File scripts\evaluate-official.ps1 `
   -ParseMode ServiceManual `
   -IndexKind HierarchicalBeamIvf `
-  -BeamLevel1 10 `
-  -BeamLevel2 32 `
+  -BeamLevel1 8 `
+  -BeamLevel2 48 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6
@@ -56,9 +55,14 @@ powershell -ExecutionPolicy Bypass -File scripts\evaluate-official.ps1 `
 
 Validated result:
 
-- `FP = 5`
-- `FN = 10`
-- detection score `2533.11`
+- `FP = 6`
+- `FN = 12`
+- detection score `2509.96`
+- search latency:
+  - `p50 = 114.2 us`
+  - `p95 = 590.7 us`
+  - `p99 = 713.1 us`
+  - `mean = 240.4 us`
 
 ## Full compliant stack
 
@@ -66,8 +70,9 @@ Command:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\benchmark-official-compose.ps1 `
-  -BeamLevel1 10 `
-  -BeamLevel2 32 `
+  -RuntimeDataDir runtime-data `
+  -BeamLevel1 8 `
+  -BeamLevel2 48 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6 `
@@ -83,36 +88,27 @@ powershell -ExecutionPolicy Bypass -File scripts\benchmark-official-compose.ps1 
 
 Latest validated result:
 
-- `p99 = 2.38 ms`
-- `FP = 5`
-- `FN = 10`
+- `p99 = 1.89 ms`
+- `FP = 6`
+- `FN = 12`
 - `http_errors = 0`
-- final score `5157.29`
+- final score `5233.41`
 
 Best observed result on the current chosen default:
 
-- `p99 = 2.30 ms`
-- `FP = 5`
-- `FN = 10`
-- `http_errors = 0`
-- final score `5172.24`
-
-Historical one-off result on a nearby configuration:
-
-- config: `beamLevel1 = 8`, `beamLevel2 = 32`, `rerankCount = 64`
-- `p99 = 2.25 ms`
+- `p99 = 1.89 ms`
 - `FP = 6`
-- `FN = 10`
+- `FN = 12`
 - `http_errors = 0`
-- final score `5176.54`
+- final score `5234.56`
 
 ## Comparison notes
 
-- HAProxy with `0.10 CPU` was a false bottleneck and produced catastrophic queueing at `900 req/s`.
-- HAProxy stabilized when raised to `0.20 CPU`, but Nginx remained slightly faster on the same resource envelope.
-- The confirmed best repeated full-stack tradeoff on this artifact set was `beamLevel1 = 10`, `beamLevel2 = 32`, `rerankCount = 48`.
-- A historical one-off `8/32/64` run scored slightly higher, but confirmation reruns favored `10/32/48` as the more defensible default.
-- Narrowing to `beamLevel2 = 24` improved latency, but the detection loss was too large and reduced total score.
+- The older `512x32` artifact family could trade a little detection for speed, but it flattened out around the low `5.17k` score range.
+- The promoted `512x64` artifact moved the frontier forward enough to justify a new default.
+- The best current full-stack point on the promoted family is `8/48/48`.
+- A more recall-heavy `10/96/48` evaluator configuration reached `FP = 1`, `FN = 3`, but its evaluator `p99` was about `1.29 ms`, so it is not yet compatible with the latency target.
+- The request-stage profile confirms the same conclusion as the evaluator: search dominates the tail, while parse, vectorize, and write stay comparatively small.
 
 ## Remaining gap
 
@@ -125,9 +121,9 @@ Current default stack is:
 
 But it is not yet at the target:
 
-- current best observed final score: `5172.24`
+- current best observed final score: `5234.56`
 - target score: `6000`
-- current best observed full-stack p99: `2.30 ms`
+- current best observed full-stack p99: `1.89 ms`
 - target p99: `<= 0.5 ms`
 
 The next optimization frontier is reducing search-path service time under the real stack, not parser correctness or LB topology.
