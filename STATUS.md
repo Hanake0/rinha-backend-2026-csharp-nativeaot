@@ -32,10 +32,10 @@
 - current measured blocker:
   - search dominates the service-side tail under the real `900 req/s` constrained stack
 - next candidate branch:
-  - continue reducing candidate scan cost before touching transport or parser internals
+  - reduce exact rerank distance cost before reopening transport or load balancer experiments
 - latest completed experiment:
-  - last-transaction history partition pruning over IVF leaf postings
-  - result: preserved detection score and improved stack latency slightly, but did not beat the repo's best observed score
+  - unsorted fixed-capacity candidate reservoir during IVF posting scans
+  - result: preserved detection score and improved evaluator and stack latency; promoted as the current default search kernel
 
 ## Current default submission shape
 
@@ -75,8 +75,13 @@
   - `FP = 5`
   - `FN = 10`
   - detection score `2533.11`
+  - search latency after candidate reservoir:
+    - `p50 = 128.7 us`
+    - `p95 = 763.2 us`
+    - `p99 = 885.6 us`
+    - `mean = 298.1 us`
 - full compliant stack, current default compose:
-  - latest validated run: `p99 = 2.38 ms`, final score `5157.29`
+  - latest validated run: `p99 = 2.31 ms`, final score `5169.92`
   - best observed run: `p99 = 2.30 ms`, final score `5172.24`
 
 ## Latest profiling anchors
@@ -110,6 +115,7 @@ See:
 - `benchmarks/results/stack/2026-05-03-stack-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `benchmarks/results/stack/2026-05-03-last-transaction-partitioning.md`
+- `benchmarks/results/stack/2026-05-03-candidate-reservoir.md`
 - `artifacts/compose-k6/k6-workdir/test/results.json`
 
 ## Current caveats

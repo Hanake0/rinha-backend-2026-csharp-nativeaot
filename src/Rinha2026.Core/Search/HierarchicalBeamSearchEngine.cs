@@ -63,6 +63,8 @@ public sealed class HierarchicalBeamSearchEngine {
 		Span<int> candidateIds = candidateCapacity <= 512 ? stackalloc int[candidateCapacity] : new int[candidateCapacity];
 		Span<int> candidateDistances = candidateCapacity <= 512 ? stackalloc int[candidateCapacity] : new int[candidateCapacity];
 		Span<sbyte> quantizedQuery = stackalloc sbyte[flatArtifacts.PaddedDimension];
+		int candidateMaxIndex = 0;
+		int candidateMaxDistance = int.MinValue;
 
 		VectorEncoding.EncodeQ8Symmetric(query[..flatArtifacts.PaddedDimension], quantizedQuery);
 
@@ -77,6 +79,8 @@ public sealed class HierarchicalBeamSearchEngine {
 				candidateIds,
 				candidateDistances,
 				ref candidateCount,
+				ref candidateMaxIndex,
+				ref candidateMaxDistance,
 				CandidatePartitionSelection.All,
 				queryWithoutHistory: false,
 				out _,
@@ -93,6 +97,8 @@ public sealed class HierarchicalBeamSearchEngine {
 			candidateIds,
 			candidateDistances,
 			ref candidateCountWithSamePartition,
+			ref candidateMaxIndex,
+			ref candidateMaxDistance,
 			CandidatePartitionSelection.SamePartitionOnly,
 			queryWithoutHistory,
 			out _,
@@ -112,6 +118,8 @@ public sealed class HierarchicalBeamSearchEngine {
 			candidateIds,
 			candidateDistances,
 			ref mergedCandidateCount,
+			ref candidateMaxIndex,
+			ref candidateMaxDistance,
 			CandidatePartitionSelection.OppositePartitionOnly,
 			queryWithoutHistory,
 			out _,
@@ -147,6 +155,8 @@ public sealed class HierarchicalBeamSearchEngine {
 		Span<int> candidateDistances = candidateCapacity <= 512 ? stackalloc int[candidateCapacity] : new int[candidateCapacity];
 		Span<sbyte> quantizedQuery = stackalloc sbyte[flatArtifacts.PaddedDimension];
 		Span<SearchHit> rerankHits = topK <= 16 ? stackalloc SearchHit[topK] : new SearchHit[topK];
+		int candidateMaxIndex = 0;
+		int candidateMaxDistance = int.MinValue;
 
 		VectorEncoding.EncodeQ8Symmetric(query[..flatArtifacts.PaddedDimension], quantizedQuery);
 
@@ -161,6 +171,8 @@ public sealed class HierarchicalBeamSearchEngine {
 				candidateIds,
 				candidateDistances,
 				ref candidateCount,
+				ref candidateMaxIndex,
+				ref candidateMaxDistance,
 				CandidatePartitionSelection.All,
 				queryWithoutHistory: false,
 				out int scannedCandidateCount,
@@ -184,6 +196,8 @@ public sealed class HierarchicalBeamSearchEngine {
 			candidateIds,
 			candidateDistances,
 			ref candidateCountWithSamePartition,
+			ref candidateMaxIndex,
+			ref candidateMaxDistance,
 			CandidatePartitionSelection.SamePartitionOnly,
 			queryWithoutHistory,
 			out int primaryScanCount,
@@ -210,6 +224,8 @@ public sealed class HierarchicalBeamSearchEngine {
 			candidateIds,
 			candidateDistances,
 			ref mergedCandidateCount,
+			ref candidateMaxIndex,
+			ref candidateMaxDistance,
 			CandidatePartitionSelection.OppositePartitionOnly,
 			queryWithoutHistory,
 			out int secondaryScanCount,
@@ -271,6 +287,8 @@ public sealed class HierarchicalBeamSearchEngine {
 		Span<int> destinationIds,
 		Span<int> destinationDistances,
 		ref int count,
+		ref int currentMaxIndex,
+		ref int currentMaxDistance,
 		CandidatePartitionSelection partitionSelection,
 		bool queryWithoutHistory,
 		out int scannedCandidateCount,
@@ -328,7 +346,9 @@ public sealed class HierarchicalBeamSearchEngine {
 					end,
 					destinationIds,
 					destinationDistances,
-					ref count);
+					ref count,
+					ref currentMaxIndex,
+					ref currentMaxDistance);
 			} else {
 				ScanExplicitPostingLeaf(
 					query,
@@ -339,7 +359,9 @@ public sealed class HierarchicalBeamSearchEngine {
 					end,
 					destinationIds,
 					destinationDistances,
-					ref count);
+					ref count,
+					ref currentMaxIndex,
+					ref currentMaxDistance);
 			}
 		}
 
@@ -426,35 +448,6 @@ public sealed class HierarchicalBeamSearchEngine {
 		}
 	}
 
-	private static void InsertSorted(
-		Span<int> destinationIds,
-		Span<int> destinationDistances,
-		ref int count,
-		int id,
-		int distance) {
-		if ((count == destinationIds.Length) && (distance >= destinationDistances[destinationIds.Length - 1])) {
-			return;
-		}
-
-		int insertAt = Math.Min(count, destinationIds.Length - 1);
-
-		while ((insertAt > 0) && (distance < destinationDistances[insertAt - 1])) {
-			if (insertAt < destinationIds.Length) {
-				destinationIds[insertAt] = destinationIds[insertAt - 1];
-				destinationDistances[insertAt] = destinationDistances[insertAt - 1];
-			}
-
-			insertAt--;
-		}
-
-		destinationIds[insertAt] = id;
-		destinationDistances[insertAt] = distance;
-
-		if (count < destinationIds.Length) {
-			count++;
-		}
-	}
-
 	private static void ScanExplicitPostingLeaf(
 		ReadOnlySpan<sbyte> query,
 		ReadOnlySpan<int> postingIds,
@@ -464,14 +457,23 @@ public sealed class HierarchicalBeamSearchEngine {
 		int end,
 		Span<int> destinationIds,
 		Span<int> destinationDistances,
-		ref int count) {
+		ref int count,
+		ref int currentMaxIndex,
+		ref int currentMaxDistance) {
 		for (int postingIndex = start; postingIndex < end; postingIndex++) {
 			int vectorId = postingIds[postingIndex];
 			int vectorOffset = checked(vectorId * paddedDimension);
 			int distance = DistanceComputations.SquaredL2Q8(
 				query,
 				quantizedVectors.Slice(vectorOffset, paddedDimension));
-			InsertSorted(destinationIds, destinationDistances, ref count, vectorId, distance);
+			TryInsertCandidate(
+				destinationIds,
+				destinationDistances,
+				ref count,
+				ref currentMaxIndex,
+				ref currentMaxDistance,
+				vectorId,
+				distance);
 		}
 	}
 
@@ -483,16 +485,69 @@ public sealed class HierarchicalBeamSearchEngine {
 		int end,
 		Span<int> destinationIds,
 		Span<int> destinationDistances,
-		ref int count) {
+		ref int count,
+		ref int currentMaxIndex,
+		ref int currentMaxDistance) {
 		int vectorOffset = checked(start * paddedDimension);
 
 		for (int vectorId = start; vectorId < end; vectorId++) {
 			int distance = DistanceComputations.SquaredL2Q8(
 				query,
 				quantizedVectors.Slice(vectorOffset, paddedDimension));
-			InsertSorted(destinationIds, destinationDistances, ref count, vectorId, distance);
+			TryInsertCandidate(
+				destinationIds,
+				destinationDistances,
+				ref count,
+				ref currentMaxIndex,
+				ref currentMaxDistance,
+				vectorId,
+				distance);
 			vectorOffset += paddedDimension;
 		}
+	}
+
+	private static void TryInsertCandidate(
+		Span<int> destinationIds,
+		Span<int> destinationDistances,
+		ref int count,
+		ref int currentMaxIndex,
+		ref int currentMaxDistance,
+		int id,
+		int distance) {
+		if (count < destinationIds.Length) {
+			destinationIds[count] = id;
+			destinationDistances[count] = distance;
+
+			if ((count == 0) || (distance > currentMaxDistance)) {
+				currentMaxDistance = distance;
+				currentMaxIndex = count;
+			}
+
+			count++;
+			return;
+		}
+
+		if (distance >= currentMaxDistance) {
+			return;
+		}
+
+		destinationIds[currentMaxIndex] = id;
+		destinationDistances[currentMaxIndex] = distance;
+		(currentMaxIndex, currentMaxDistance) = FindMaxCandidate(destinationDistances, count);
+	}
+
+	private static (int Index, int Distance) FindMaxCandidate(ReadOnlySpan<int> distances, int count) {
+		int maxIndex = 0;
+		int maxDistance = distances[0];
+
+		for (int index = 1; index < count; index++) {
+			if (distances[index] > maxDistance) {
+				maxDistance = distances[index];
+				maxIndex = index;
+			}
+		}
+
+		return (maxIndex, maxDistance);
 	}
 
 	private enum CandidatePartitionSelection {
