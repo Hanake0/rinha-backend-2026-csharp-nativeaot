@@ -14,6 +14,7 @@ param(
 	[int]$BeamLevel2 = 128,
 	[string]$SearchIndexKind = "HierarchicalBeamIvf",
 	[int]$RerankCount = 48,
+	[int]$BoundaryRerankCount = $RerankCount,
 	[bool]$UseLeafRadiusPruning = $true,
 	[bool]$UseLastTransactionPartitionPruning = $true,
 	[int]$TopK = 5,
@@ -68,6 +69,7 @@ $env:SEARCH_BEAM_LEVEL1 = $BeamLevel1.ToString([System.Globalization.CultureInfo
 $env:SEARCH_BEAM_LEVEL2 = $BeamLevel2.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 $env:SEARCH_INDEX_KIND = $SearchIndexKind
 $env:SEARCH_RERANK_COUNT = $RerankCount.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+$env:SEARCH_BOUNDARY_RERANK_COUNT = $BoundaryRerankCount.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 $env:SEARCH_USE_LEAF_RADIUS_PRUNING = $UseLeafRadiusPruning.ToString().ToLowerInvariant()
 $env:SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING = $UseLastTransactionPartitionPruning.ToString().ToLowerInvariant()
 $env:RUNTIME_DATA_DIR = $runtimeDataRoot

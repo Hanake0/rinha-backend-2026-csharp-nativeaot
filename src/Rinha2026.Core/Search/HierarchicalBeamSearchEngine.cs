@@ -24,16 +24,33 @@ public sealed class HierarchicalBeamSearchEngine {
 		int beamLevel2,
 		int rerankCount,
 		Span<SearchHit> destination) {
-		int matchCount = this.Search(query, beamLevel1, beamLevel2, rerankCount, destination);
-		int fraudCount = 0;
+		return this.CountFraud(
+			query,
+			beamLevel1,
+			beamLevel2,
+			rerankCount,
+			rerankCount,
+			minDeniedCount: 0,
+			destination);
+	}
 
-		for (int index = 0; index < matchCount; index++) {
-			if (destination[index].IsFraud) {
-				fraudCount++;
-			}
-		}
-
-		return fraudCount;
+	public int CountFraud(
+		ReadOnlySpan<float> query,
+		int beamLevel1,
+		int beamLevel2,
+		int rerankCount,
+		int boundaryRerankCount,
+		int minDeniedCount,
+		Span<SearchHit> destination) {
+		int matchCount = this.Search(
+			query,
+			beamLevel1,
+			beamLevel2,
+			rerankCount,
+			boundaryRerankCount,
+			minDeniedCount,
+			destination);
+		return CountFraud(destination, matchCount);
 	}
 
 	public int Search(
@@ -41,6 +58,24 @@ public sealed class HierarchicalBeamSearchEngine {
 		int beamLevel1,
 		int beamLevel2,
 		int rerankCount,
+		Span<SearchHit> destination) {
+		return this.Search(
+			query,
+			beamLevel1,
+			beamLevel2,
+			rerankCount,
+			rerankCount,
+			minDeniedCount: 0,
+			destination);
+	}
+
+	public int Search(
+		ReadOnlySpan<float> query,
+		int beamLevel1,
+		int beamLevel2,
+		int rerankCount,
+		int boundaryRerankCount,
+		int minDeniedCount,
 		Span<SearchHit> destination) {
 		if (destination.IsEmpty) {
 			throw new ArgumentException("Destination span must not be empty.", nameof(destination));
@@ -55,7 +90,7 @@ public sealed class HierarchicalBeamSearchEngine {
 		int parentBeamCount = Math.Clamp(beamLevel1, 1, this.artifactSet.Level1ClusterCount);
 		int leafBeamCount = Math.Clamp(beamLevel2, 1, this.artifactSet.LeafCount);
 		int candidateCapacity = Math.Clamp(
-			rerankCount,
+			Math.Max(rerankCount, boundaryRerankCount),
 			destination.Length,
 			checked((int)flatArtifacts.VectorCount));
 
@@ -93,7 +128,15 @@ public sealed class HierarchicalBeamSearchEngine {
 				out _,
 				out _,
 				out _);
-			return this.RerankCandidates(query, candidateIds[..candidateCount], destination);
+			return this.RerankCandidatesWithBoundaryExpansion(
+				query,
+				candidateIds[..candidateCount],
+				candidateDistances[..candidateCount],
+				rerankCount,
+				boundaryRerankCount,
+				minDeniedCount,
+				destination,
+				out _);
 		}
 
 		bool queryWithoutHistory = IsWithoutHistoryQuery(query);
@@ -114,7 +157,15 @@ public sealed class HierarchicalBeamSearchEngine {
 			out _,
 			out _,
 			out _);
-		int matchCount = this.RerankCandidates(query, candidateIds[..candidateCountWithSamePartition], destination);
+		int matchCount = this.RerankCandidatesWithBoundaryExpansion(
+			query,
+			candidateIds[..candidateCountWithSamePartition],
+			candidateDistances[..candidateCountWithSamePartition],
+			rerankCount,
+			boundaryRerankCount,
+			minDeniedCount,
+			destination,
+			out _);
 
 		if ((matchCount == destination.Length) &&
 			(destination[matchCount - 1].Distance < CrossHistoryLowerBoundSquaredL2)) {
@@ -138,7 +189,15 @@ public sealed class HierarchicalBeamSearchEngine {
 			out _,
 			out _,
 			out _);
-		return this.RerankCandidates(query, candidateIds[..mergedCandidateCount], destination);
+		return this.RerankCandidatesWithBoundaryExpansion(
+			query,
+			candidateIds[..mergedCandidateCount],
+			candidateDistances[..mergedCandidateCount],
+			rerankCount,
+			boundaryRerankCount,
+			minDeniedCount,
+			destination,
+			out _);
 	}
 
 	public HierarchicalSearchTrace Trace(
@@ -146,6 +205,24 @@ public sealed class HierarchicalBeamSearchEngine {
 		int beamLevel1,
 		int beamLevel2,
 		int rerankCount,
+		int topK) {
+		return this.Trace(
+			query,
+			beamLevel1,
+			beamLevel2,
+			rerankCount,
+			rerankCount,
+			minDeniedCount: 0,
+			topK);
+	}
+
+	public HierarchicalSearchTrace Trace(
+		ReadOnlySpan<float> query,
+		int beamLevel1,
+		int beamLevel2,
+		int rerankCount,
+		int boundaryRerankCount,
+		int minDeniedCount,
 		int topK) {
 		FlatArtifactSet flatArtifacts = this.artifactSet.FlatArtifacts;
 
@@ -156,8 +233,8 @@ public sealed class HierarchicalBeamSearchEngine {
 		int parentBeamCount = Math.Clamp(beamLevel1, 1, this.artifactSet.Level1ClusterCount);
 		int leafBeamCount = Math.Clamp(beamLevel2, 1, this.artifactSet.LeafCount);
 		int candidateCapacity = Math.Clamp(
-			rerankCount,
-			1,
+			Math.Max(rerankCount, boundaryRerankCount),
+			topK,
 			checked((int)flatArtifacts.VectorCount));
 
 		Span<int> parentIds = parentBeamCount <= 128 ? stackalloc int[parentBeamCount] : new int[parentBeamCount];
@@ -195,11 +272,20 @@ public sealed class HierarchicalBeamSearchEngine {
 				out int branchMinSelectedLeafSize,
 				out int prunedLeafCount,
 				out int prunedCandidateCount);
+			this.RerankCandidatesWithBoundaryExpansion(
+				query,
+				candidateIds[..candidateCount],
+				candidateDistances[..candidateCount],
+				rerankCount,
+				boundaryRerankCount,
+				minDeniedCount,
+				rerankHits,
+				out int actualRerankCount);
 			return new HierarchicalSearchTrace(
 				parentCount,
 				leafCount,
 				scannedCandidateCount,
-				candidateCount,
+				actualRerankCount,
 				branchMaxSelectedLeafSize,
 				branchMinSelectedLeafSize,
 				prunedLeafCount,
@@ -225,7 +311,15 @@ public sealed class HierarchicalBeamSearchEngine {
 			out int minSelectedLeafSize,
 			out int primaryPrunedLeafCount,
 			out int primaryPrunedCandidateCount);
-		int provisionalCount = this.RerankCandidates(query, candidateIds[..candidateCountWithSamePartition], rerankHits);
+		int provisionalCount = this.RerankCandidatesWithBoundaryExpansion(
+			query,
+			candidateIds[..candidateCountWithSamePartition],
+			candidateDistances[..candidateCountWithSamePartition],
+			rerankCount,
+			boundaryRerankCount,
+			minDeniedCount,
+			rerankHits,
+			out int primaryRerankCount);
 
 		if ((provisionalCount == rerankHits.Length) &&
 			(rerankHits[provisionalCount - 1].Distance < CrossHistoryLowerBoundSquaredL2)) {
@@ -233,7 +327,7 @@ public sealed class HierarchicalBeamSearchEngine {
 				parentCount,
 				leafCount,
 				primaryScanCount,
-				candidateCountWithSamePartition,
+				primaryRerankCount,
 				maxSelectedLeafSize,
 				minSelectedLeafSize,
 				primaryPrunedLeafCount,
@@ -258,11 +352,20 @@ public sealed class HierarchicalBeamSearchEngine {
 			out _,
 			out int secondaryPrunedLeafCount,
 			out int secondaryPrunedCandidateCount);
+		this.RerankCandidatesWithBoundaryExpansion(
+			query,
+			candidateIds[..mergedCandidateCount],
+			candidateDistances[..mergedCandidateCount],
+			rerankCount,
+			boundaryRerankCount,
+			minDeniedCount,
+			rerankHits,
+			out int finalRerankCount);
 		return new HierarchicalSearchTrace(
 			parentCount,
 			leafCount,
 			primaryScanCount + secondaryScanCount,
-			mergedCandidateCount,
+			finalRerankCount,
 			maxSelectedLeafSize,
 			minSelectedLeafSize,
 			primaryPrunedLeafCount + secondaryPrunedLeafCount,
@@ -435,7 +538,15 @@ public sealed class HierarchicalBeamSearchEngine {
 		ReadOnlySpan<float> query,
 		ReadOnlySpan<int> candidateIds,
 		Span<SearchHit> destination) {
-		int count = 0;
+		return this.RerankCandidates(query, candidateIds, destination, count: 0);
+	}
+
+	private int RerankCandidates(
+		ReadOnlySpan<float> query,
+		ReadOnlySpan<int> candidateIds,
+		Span<SearchHit> destination,
+		int count) {
+		int matchCount = count;
 
 		if (this.artifactSet.FlatArtifacts.HasFullPrecisionRerankVectors) {
 			ReadOnlySpan<byte> rerankVectors = this.artifactSet.FlatArtifacts.GetFullPrecisionRerankVectors();
@@ -447,10 +558,10 @@ public sealed class HierarchicalBeamSearchEngine {
 					query,
 					rerankVectors.Slice(vectorId * vectorWidthInBytes, vectorWidthInBytes));
 				bool isFraud = this.artifactSet.FlatArtifacts.IsFraud(vectorId);
-				InsertSorted(destination, ref count, new SearchHit(vectorId, distance, isFraud), this.artifactSet.FlatArtifacts);
+				InsertSorted(destination, ref matchCount, new SearchHit(vectorId, distance, isFraud), this.artifactSet.FlatArtifacts);
 			}
 
-			return count;
+			return matchCount;
 		}
 
 		ReadOnlySpan<byte> fallbackRerankVectors = this.artifactSet.FlatArtifacts.GetRerankVectors();
@@ -462,10 +573,67 @@ public sealed class HierarchicalBeamSearchEngine {
 				query,
 				fallbackRerankVectors.Slice(vectorId * fallbackVectorWidthInBytes, fallbackVectorWidthInBytes));
 			bool isFraud = this.artifactSet.FlatArtifacts.IsFraud(vectorId);
-			InsertSorted(destination, ref count, new SearchHit(vectorId, distance, isFraud), this.artifactSet.FlatArtifacts);
+			InsertSorted(destination, ref matchCount, new SearchHit(vectorId, distance, isFraud), this.artifactSet.FlatArtifacts);
 		}
 
-		return count;
+		return matchCount;
+	}
+
+	private int RerankCandidatesWithBoundaryExpansion(
+		ReadOnlySpan<float> query,
+		Span<int> candidateIds,
+		Span<int> candidateDistances,
+		int rerankCount,
+		int boundaryRerankCount,
+		int minDeniedCount,
+		Span<SearchHit> destination,
+		out int actualRerankCount) {
+		if (candidateIds.Length != candidateDistances.Length) {
+			throw new ArgumentException("Candidate ids and distances must have matching lengths.");
+		}
+
+		int primaryRerankCount = ClampRerankCount(rerankCount, destination.Length, candidateIds.Length);
+		int expandedRerankCount = ClampRerankCount(boundaryRerankCount, destination.Length, candidateIds.Length);
+		int matchCount;
+
+		if (expandedRerankCount > primaryRerankCount) {
+			Span<int> primaryCandidateIds = primaryRerankCount <= 64
+				? stackalloc int[primaryRerankCount]
+				: new int[primaryRerankCount];
+			Span<int> primaryCandidateDistances = primaryRerankCount <= 64
+				? stackalloc int[primaryRerankCount]
+				: new int[primaryRerankCount];
+			int primaryCandidateCount = 0;
+			int currentMaxIndex = 0;
+			int currentMaxDistance = int.MinValue;
+			float currentMaxDistanceNorm = 0f;
+
+			for (int candidateIndex = 0; candidateIndex < expandedRerankCount; candidateIndex++) {
+				TryInsertCandidate(
+					primaryCandidateIds,
+					primaryCandidateDistances,
+					ref primaryCandidateCount,
+					ref currentMaxIndex,
+					ref currentMaxDistance,
+					ref currentMaxDistanceNorm,
+					candidateIds[candidateIndex],
+					candidateDistances[candidateIndex]);
+			}
+
+			matchCount = this.RerankCandidates(query, primaryCandidateIds[..primaryCandidateCount], destination);
+		} else {
+			matchCount = this.RerankCandidates(query, candidateIds[..primaryRerankCount], destination);
+		}
+
+		actualRerankCount = primaryRerankCount;
+
+		if ((expandedRerankCount > primaryRerankCount) &&
+			ShouldExpandBoundaryRerank(CountFraud(destination, matchCount), destination.Length, minDeniedCount)) {
+			matchCount = this.RerankCandidates(query, candidateIds[..expandedRerankCount], destination);
+			actualRerankCount = expandedRerankCount;
+		}
+
+		return matchCount;
 	}
 
 	private bool ShouldUseLastTransactionPartitionPruning() =>
@@ -475,6 +643,29 @@ public sealed class HierarchicalBeamSearchEngine {
 		this.useLeafRadiusPruning && this.artifactSet.HasLeafRadiusBounds;
 
 	private static bool IsWithoutHistoryQuery(ReadOnlySpan<float> query) => (query[5] < 0f) && (query[6] < 0f);
+
+	private static int ClampRerankCount(int requestedCount, int topK, int candidateCount) =>
+		Math.Min(candidateCount, Math.Max(requestedCount, topK));
+
+	private static int CountFraud(ReadOnlySpan<SearchHit> hits, int count) {
+		int fraudCount = 0;
+
+		for (int index = 0; index < count; index++) {
+			if (hits[index].IsFraud) {
+				fraudCount++;
+			}
+		}
+
+		return fraudCount;
+	}
+
+	private static bool ShouldExpandBoundaryRerank(int fraudCount, int topK, int minDeniedCount) {
+		if ((topK <= 0) || (minDeniedCount < 0)) {
+			return false;
+		}
+
+		return (fraudCount == minDeniedCount) || (fraudCount == (minDeniedCount - 1));
+	}
 
 	private static void InsertSorted(Span<SearchHit> destination, ref int count, SearchHit candidate, FlatArtifactSet artifactSet) {
 		if ((count == destination.Length) && !ShouldInsertBefore(candidate, destination[destination.Length - 1], artifactSet)) {

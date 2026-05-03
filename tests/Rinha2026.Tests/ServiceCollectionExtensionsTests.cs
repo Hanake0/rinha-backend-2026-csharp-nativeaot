@@ -22,11 +22,13 @@ public sealed class ServiceCollectionExtensionsTests {
 			["Runtime:Search:IndexKind"] = "HierarchicalBeamIvf",
 			["Runtime:Search:PaddedDimension"] = "16",
 			["Runtime:Search:RerankCount"] = "68",
+			["Runtime:Search:BoundaryRerankCount"] = "96",
 			["Runtime:Search:UseLeafRadiusPruning"] = "true",
 			["Runtime:Search:UseLastTransactionPartitionPruning"] = "false",
 			["Runtime:Http:ParserMode"] = "ReferenceStj",
 			["Runtime:Http:ResponseMode"] = "PrecomputedTable",
-			["Runtime:Http:TransportMode"] = "Tcp",
+			["Runtime:Http:TransportMode"] = "UnixDomainSocket",
+			["Runtime:Http:UnixSocketPath"] = "./sockets/api1.sock",
 			["Runtime:Diagnostics:ProfileEnabled"] = "true",
 			["Runtime:Diagnostics:ProfileSampleCapacity"] = "2048",
 			["Runtime:Diagnostics:ProfileSamplingStride"] = "32",
@@ -47,9 +49,12 @@ public sealed class ServiceCollectionExtensionsTests {
 		Assert.Equal(10, runtimeConfig.Search.BeamLevel1);
 		Assert.Equal(17, runtimeConfig.Search.BeamLevel2);
 		Assert.Equal(68, runtimeConfig.Search.RerankCount);
+		Assert.Equal(96, runtimeConfig.Search.BoundaryRerankCount);
 		Assert.True(runtimeConfig.Search.UseLeafRadiusPruning);
 		Assert.False(runtimeConfig.Search.UseLastTransactionPartitionPruning);
 		Assert.Equal(ParserMode.ReferenceStj, runtimeConfig.Http.ParserMode);
+		Assert.Equal(TransportMode.UnixDomainSocket, runtimeConfig.Http.TransportMode);
+		Assert.EndsWith("sockets" + Path.DirectorySeparatorChar + "api1.sock", runtimeConfig.Http.UnixSocketPath, StringComparison.Ordinal);
 		Assert.True(runtimeConfig.Diagnostics.ProfileEnabled);
 		Assert.Equal(2048, runtimeConfig.Diagnostics.ProfileSampleCapacity);
 		Assert.Equal(32, runtimeConfig.Diagnostics.ProfileSamplingStride);

@@ -22,9 +22,13 @@ public sealed class RuntimeConfigFactoryTests {
 		Assert.Equal(10, runtimeConfig.Search.BeamLevel1);
 		Assert.Equal(32, runtimeConfig.Search.BeamLevel2);
 		Assert.Equal(48, runtimeConfig.Search.RerankCount);
+		Assert.Equal(48, runtimeConfig.Search.BoundaryRerankCount);
 		Assert.False(runtimeConfig.Search.UseLeafRadiusPruning);
 		Assert.True(runtimeConfig.Search.UseLastTransactionPartitionPruning);
 		Assert.Equal(6, runtimeConfig.Detection.ResponseCount);
+		Assert.Equal(3, runtimeConfig.Detection.MinDeniedCount);
+		Assert.Equal(2, runtimeConfig.Detection.MaxApprovedCount);
+		Assert.Null(runtimeConfig.Http.UnixSocketPath);
 		Assert.False(runtimeConfig.Diagnostics.ProfileEnabled);
 		Assert.Equal(8192, runtimeConfig.Diagnostics.ProfileSampleCapacity);
 		Assert.Equal(64, runtimeConfig.Diagnostics.ProfileSamplingStride);
@@ -76,6 +80,29 @@ public sealed class RuntimeConfigFactoryTests {
 	}
 
 	[Fact]
+	public void CreateRejectsUnixDomainSocketModeWithoutPath() {
+		RuntimeSettings settings = new() {
+			Http = new HttpSettings {
+				TransportMode = TransportMode.UnixDomainSocket,
+			},
+		};
+
+		Assert.Throws<ArgumentException>(() => RuntimeConfigFactory.Create(settings, AppContext.BaseDirectory));
+	}
+
+	[Fact]
+	public void CreateRejectsBoundaryRerankCountBelowPrimaryRerankCount() {
+		RuntimeSettings settings = new() {
+			Search = new SearchSettings {
+				RerankCount = 48,
+				BoundaryRerankCount = 32,
+			},
+		};
+
+		Assert.Throws<ArgumentOutOfRangeException>(() => RuntimeConfigFactory.Create(settings, AppContext.BaseDirectory));
+	}
+
+	[Fact]
 	public void CreateRejectsInvalidProfileSamplingStride() {
 		RuntimeSettings settings = new() {
 			Diagnostics = new DiagnosticsSettings {
@@ -84,5 +111,20 @@ public sealed class RuntimeConfigFactoryTests {
 		};
 
 		Assert.Throws<ArgumentOutOfRangeException>(() => RuntimeConfigFactory.Create(settings, AppContext.BaseDirectory));
+	}
+
+	[Fact]
+	public void CreateNormalizesUnixSocketPathAgainstContentRoot() {
+		string contentRootPath = Path.Combine("C:\\", "work", "submission");
+		RuntimeSettings settings = new() {
+			Http = new HttpSettings {
+				TransportMode = TransportMode.UnixDomainSocket,
+				UnixSocketPath = "./sockets/api1.sock",
+			},
+		};
+
+		RuntimeConfig runtimeConfig = RuntimeConfigFactory.Create(settings, contentRootPath);
+
+		Assert.Equal(Path.Combine(contentRootPath, "sockets", "api1.sock"), runtimeConfig.Http.UnixSocketPath);
 	}
 }

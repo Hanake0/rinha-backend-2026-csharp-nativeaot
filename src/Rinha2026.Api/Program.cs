@@ -3,6 +3,7 @@ using System.Text.Json;
 using Rinha2026.Api.Configuration;
 using Rinha2026.Api.Endpoints;
 using Rinha2026.Api.Services;
+using Rinha2026.Core.Configuration;
 
 WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(args);
 SocketTransportConfiguration.Configure(builder.WebHost, builder.Configuration);
@@ -11,6 +12,8 @@ builder.Logging.SetMinimumLevel(LogLevel.Warning);
 builder.Services.AddRuntimeServices(builder.Configuration, builder.Environment.ContentRootPath);
 
 WebApplication app = builder.Build();
+RuntimeConfig runtimeConfig = app.Services.GetRequiredService<RuntimeConfig>();
+SocketTransportConfiguration.ConfigureApplication(app.Lifetime, runtimeConfig.Http);
 
 app.MapGet(
 	"/ready",

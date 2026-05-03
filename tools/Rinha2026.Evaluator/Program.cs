@@ -26,12 +26,14 @@ RuntimeConfig runtimeConfig = new(
 		options.IndexKind,
 		PaddedDimension: 16,
 		options.RerankCount,
+		options.BoundaryRerankCount,
 		options.UseLeafRadiusPruning,
 		options.UseLastTransactionPartitionPruning),
 	new RuntimeHttpConfig(
 		GetRuntimeParserMode(options.ParseMode),
 		ResponseMode.PrecomputedTable,
-		TransportMode.Tcp));
+		TransportMode.Tcp,
+		UnixSocketPath: null));
 
 NormalizationConstants normalizationConstants = ReferenceDataLoader.LoadNormalizationConstants(runtimeConfig.Dataset.NormalizationPath);
 MccRiskTable mccRiskTable = ReferenceDataLoader.LoadMccRiskTable(runtimeConfig.Dataset.MccRiskPath);
@@ -64,6 +66,7 @@ List<int>? tracePrunedLeafCounts = options.TraceEvery > 0 ? new List<int>() : nu
 List<int>? tracePrunedCandidateCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<int>? traceSecondaryScanCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<EvaluatorMismatch> mismatches = [];
+int[] fraudCountHistogram = new int[options.TopK + 1];
 SearchHit[] hits = new SearchHit[options.TopK];
 float[] vectorBuffer = new float[FraudVectorizer.PaddedDimension];
 
@@ -132,6 +135,10 @@ foreach (JsonElement entry in entries) {
 		approved = fraudScore < options.ApprovalThreshold;
 	}
 
+	if ((uint)fraudCount < (uint)fraudCountHistogram.Length) {
+		fraudCountHistogram[fraudCount]++;
+	}
+
 	if (approved == expectedApproved) {
 		if (approved) {
 			trueNegativeCount++;
@@ -167,15 +174,16 @@ EvaluatorSummary summary = new(
 		options.ParseMode.ToString(),
 		options.BeamLevel1,
 		options.BeamLevel2,
-	options.RerankCount,
-	options.TopK,
-	options.ApprovalThreshold,
-	options.UseLeafRadiusPruning,
-	options.UseLastTransactionPartitionPruning,
-	options.StartIndex,
-	options.TraceEvery,
-	options.MismatchLimit,
-	evaluatedCount),
+		options.RerankCount,
+		options.BoundaryRerankCount,
+		options.TopK,
+		options.ApprovalThreshold,
+		options.UseLeafRadiusPruning,
+		options.UseLastTransactionPartitionPruning,
+		options.StartIndex,
+		options.TraceEvery,
+		options.MismatchLimit,
+		evaluatedCount),
 	new EvaluatorDatasetStats(
 		stats.GetProperty("total").GetInt32(),
 		stats.GetProperty("fraud_count").GetInt32(),
@@ -189,6 +197,7 @@ EvaluatorSummary summary = new(
 		trueNegativeCount,
 		falsePositiveCount,
 		falseNegativeCount),
+	new FraudCountHistogram(fraudCountHistogram),
 	BuildDetectionScoring(evaluatedCount, falsePositiveCount, falseNegativeCount),
 	mismatches,
 	new EvaluatorLatencySummary(
@@ -456,6 +465,7 @@ internal sealed record EvaluatorSummary(
 	EvaluatorSettings Settings,
 	EvaluatorDatasetStats Dataset,
 	EvaluatorBreakdown Breakdown,
+	FraudCountHistogram FraudCountHistogram,
 	EvaluatorDetectionScoring Detection,
 	List<EvaluatorMismatch> Mismatches,
 	EvaluatorLatencySummary Latency,
@@ -469,6 +479,7 @@ internal sealed record EvaluatorSettings(
 	int BeamLevel1,
 	int BeamLevel2,
 	int RerankCount,
+	int BoundaryRerankCount,
 	int TopK,
 	double ApprovalThreshold,
 	bool UseLeafRadiusPruning,
@@ -492,6 +503,8 @@ internal sealed record EvaluatorBreakdown(
 	int TrueNegativeDetections,
 	int FalsePositiveDetections,
 	int FalseNegativeDetections);
+
+internal sealed record FraudCountHistogram(int[] Counts);
 
 internal sealed record EvaluatorDetectionScoring(
 	int WeightedErrors,
@@ -550,6 +563,7 @@ internal sealed class EvaluatorOptions {
 		int beamLevel1,
 		int beamLevel2,
 		int rerankCount,
+		int boundaryRerankCount,
 		int topK,
 		double approvalThreshold,
 		int startIndex,
@@ -565,6 +579,7 @@ internal sealed class EvaluatorOptions {
 		this.BeamLevel1 = beamLevel1;
 		this.BeamLevel2 = beamLevel2;
 		this.RerankCount = rerankCount;
+		this.BoundaryRerankCount = boundaryRerankCount;
 		this.TopK = topK;
 		this.ApprovalThreshold = approvalThreshold;
 		this.StartIndex = startIndex;
@@ -580,6 +595,8 @@ internal sealed class EvaluatorOptions {
 	public int BeamLevel1 { get; }
 
 	public int BeamLevel2 { get; }
+
+	public int BoundaryRerankCount { get; }
 
 	public IndexKind IndexKind { get; }
 
@@ -627,6 +644,12 @@ internal sealed class EvaluatorOptions {
 			int.Parse(GetValue(values, "--beam-level1", "10"), System.Globalization.CultureInfo.InvariantCulture),
 			int.Parse(GetValue(values, "--beam-level2", "32"), System.Globalization.CultureInfo.InvariantCulture),
 			int.Parse(GetValue(values, "--rerank-count", "48"), System.Globalization.CultureInfo.InvariantCulture),
+			int.Parse(
+				GetValue(
+					values,
+					"--boundary-rerank-count",
+					GetValue(values, "--rerank-count", "48")),
+				System.Globalization.CultureInfo.InvariantCulture),
 			int.Parse(GetValue(values, "--top-k", "5"), System.Globalization.CultureInfo.InvariantCulture),
 			double.Parse(GetValue(values, "--approval-threshold", "0.6"), System.Globalization.CultureInfo.InvariantCulture),
 			int.Parse(GetValue(values, "--start-index", "0"), System.Globalization.CultureInfo.InvariantCulture),

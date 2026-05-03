@@ -43,6 +43,8 @@ public sealed class SearchSettings {
 
 	public int RerankCount { get; init; } = 48;
 
+	public int BoundaryRerankCount { get; init; } = 48;
+
 	public bool UseLeafRadiusPruning { get; init; }
 
 	public bool UseLastTransactionPartitionPruning { get; init; } = true;
@@ -54,6 +56,8 @@ public sealed class HttpSettings {
 	public ResponseMode ResponseMode { get; init; } = ResponseMode.PrecomputedTable;
 
 	public TransportMode TransportMode { get; init; } = TransportMode.Tcp;
+
+	public string? UnixSocketPath { get; init; }
 }
 
 public sealed class DiagnosticsSettings {

@@ -6,6 +6,7 @@ param(
 	[int]$BeamLevel1 = 8,
 	[int]$BeamLevel2 = 128,
 	[int]$RerankCount = 48,
+	[int]$BoundaryRerankCount = $RerankCount,
 	[int]$TopK = 5,
 	[double]$ApprovalThreshold = 0.6,
 	[bool]$UseLeafRadiusPruning = $true,
@@ -30,6 +31,7 @@ dotnet run -c Release --project (Join-Path $repoRoot "tools\\Rinha2026.Evaluator
 	--beam-level1 $BeamLevel1 `
 	--beam-level2 $BeamLevel2 `
 	--rerank-count $RerankCount `
+	--boundary-rerank-count $BoundaryRerankCount `
 	--top-k $TopK `
 	--approval-threshold $ApprovalThreshold `
 	--use-leaf-radius-pruning $UseLeafRadiusPruning `

@@ -11,6 +11,20 @@ public readonly record struct RuntimeDetectionConfig(
 	int TopK,
 	double ApprovalThreshold) {
 	public int ResponseCount => checked(this.TopK + 1);
+
+	public int MinDeniedCount => ComputeMinDeniedCount(this.TopK, this.ApprovalThreshold);
+
+	public int MaxApprovedCount => this.MinDeniedCount - 1;
+
+	public static int ComputeMinDeniedCount(int topK, double approvalThreshold) {
+		for (int fraudCount = 0; fraudCount <= topK; fraudCount++) {
+			if ((fraudCount / (double)topK) >= approvalThreshold) {
+				return fraudCount;
+			}
+		}
+
+		return topK;
+	}
 }
 
 public readonly record struct RuntimeDatasetConfig(
@@ -26,13 +40,15 @@ public readonly record struct RuntimeSearchConfig(
 	IndexKind IndexKind,
 	int PaddedDimension,
 	int RerankCount,
+	int BoundaryRerankCount,
 	bool UseLeafRadiusPruning,
 	bool UseLastTransactionPartitionPruning);
 
 public readonly record struct RuntimeHttpConfig(
 	ParserMode ParserMode,
 	ResponseMode ResponseMode,
-	TransportMode TransportMode);
+	TransportMode TransportMode,
+	string? UnixSocketPath);
 
 public readonly record struct RuntimeDiagnosticsConfig(
 	bool ProfileEnabled,

@@ -66,9 +66,40 @@ public sealed class FraudDetectionServiceParityTests {
 			$"Request {requestIndex} expected approved={entry.ExpectedApproved} but endpoint returned approved={approved}, fraud_score={fraudScore.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");
 	}
 
-	private static RuntimeConfig CreateRuntimeConfig(ParserMode parserMode) {
+	[Fact]
+	public void AdaptiveBoundaryRerankFixesKnownOfficialBoundaryMismatch() {
+		RuntimeConfig runtimeConfig = CreateRuntimeConfig(
+			ParserMode.Manual,
+			runtimeDataDirectoryName: "runtime-data-256x128-radii-f32-stable-s524k",
+			beamLevel1: 8,
+			beamLevel2: 128,
+			rerankCount: 32,
+			boundaryRerankCount: 48,
+			useLeafRadiusPruning: true,
+			useLastTransactionPartitionPruning: false);
+		OfficialRequestEntry entry = LoadOfficialEntry(25640);
+
+		using FraudDetectionService service = FraudDetectionService.Create(runtimeConfig);
+
+		Assert.True(service.TryHandle(entry.Payload, out ReadOnlyMemory<byte> response));
+
+		using JsonDocument document = JsonDocument.Parse(response);
+		bool approved = document.RootElement.GetProperty("approved").GetBoolean();
+
+		Assert.Equal(entry.ExpectedApproved, approved);
+	}
+
+	private static RuntimeConfig CreateRuntimeConfig(
+		ParserMode parserMode,
+		string runtimeDataDirectoryName = "runtime-data",
+		int beamLevel1 = 10,
+		int beamLevel2 = 17,
+		int rerankCount = 68,
+		int boundaryRerankCount = 68,
+		bool useLeafRadiusPruning = false,
+		bool useLastTransactionPartitionPruning = true) {
 		string repoRoot = GetRepoRoot();
-		string runtimeDataRoot = Path.Combine(repoRoot, "runtime-data");
+		string runtimeDataRoot = Path.Combine(repoRoot, runtimeDataDirectoryName);
 
 		return new RuntimeConfig(
 			new RuntimeDetectionConfig(TopK: 5, ApprovalThreshold: 0.6d),
@@ -77,19 +108,21 @@ public sealed class FraudDetectionServiceParityTests {
 				Path.Combine(runtimeDataRoot, "mcc_risk.json"),
 				Path.Combine(runtimeDataRoot, "normalization.json")),
 			new RuntimeSearchConfig(
-				BeamLevel1: 10,
-				BeamLevel2: 17,
+				BeamLevel1: beamLevel1,
+				BeamLevel2: beamLevel2,
 				Dimension: 14,
 				DistanceMetric: DistanceMetric.SquaredL2,
 				IndexKind: IndexKind.HierarchicalBeamIvf,
 				PaddedDimension: 16,
-				RerankCount: 68,
-				UseLeafRadiusPruning: false,
-				UseLastTransactionPartitionPruning: true),
+				RerankCount: rerankCount,
+				BoundaryRerankCount: boundaryRerankCount,
+				UseLeafRadiusPruning: useLeafRadiusPruning,
+				UseLastTransactionPartitionPruning: useLastTransactionPartitionPruning),
 			new RuntimeHttpConfig(
 				ParserMode: parserMode,
 				ResponseMode: ResponseMode.PrecomputedTable,
-				TransportMode: TransportMode.Tcp));
+				TransportMode: TransportMode.Tcp,
+				UnixSocketPath: null));
 	}
 
 	private static OfficialRequestEntry LoadOfficialEntry(int targetIndex) {

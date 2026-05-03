@@ -4,6 +4,7 @@ using Rinha2026.Core.Indexing;
 namespace Rinha2026.Core.Search;
 
 public sealed class VectorSearchRuntime : IDisposable {
+	private readonly RuntimeDetectionConfig detectionConfig;
 	private readonly ExactFlatSearchEngine? exactEngine;
 	private readonly FlatArtifactSet? exactFlatArtifacts;
 	private readonly HierarchicalArtifactSet? hierarchicalArtifacts;
@@ -11,18 +12,22 @@ public sealed class VectorSearchRuntime : IDisposable {
 	private readonly RuntimeSearchConfig searchConfig;
 
 	private VectorSearchRuntime(
+		RuntimeDetectionConfig detectionConfig,
 		RuntimeSearchConfig searchConfig,
 		FlatArtifactSet exactFlatArtifacts,
 		ExactFlatSearchEngine exactEngine) {
+		this.detectionConfig = detectionConfig;
 		this.searchConfig = searchConfig;
 		this.exactFlatArtifacts = exactFlatArtifacts;
 		this.exactEngine = exactEngine;
 	}
 
 	private VectorSearchRuntime(
+		RuntimeDetectionConfig detectionConfig,
 		RuntimeSearchConfig searchConfig,
 		HierarchicalArtifactSet hierarchicalArtifacts,
 		HierarchicalBeamSearchEngine hierarchicalEngine) {
+		this.detectionConfig = detectionConfig;
 		this.searchConfig = searchConfig;
 		this.hierarchicalArtifacts = hierarchicalArtifacts;
 		this.hierarchicalEngine = hierarchicalEngine;
@@ -44,6 +49,8 @@ public sealed class VectorSearchRuntime : IDisposable {
 				this.searchConfig.BeamLevel1,
 				this.searchConfig.BeamLevel2,
 				this.searchConfig.RerankCount,
+				this.searchConfig.BoundaryRerankCount,
+				this.detectionConfig.MinDeniedCount,
 				scratch);
 		}
 
@@ -65,6 +72,8 @@ public sealed class VectorSearchRuntime : IDisposable {
 			this.searchConfig.BeamLevel1,
 			this.searchConfig.BeamLevel2,
 			this.searchConfig.RerankCount,
+			this.searchConfig.BoundaryRerankCount,
+			this.detectionConfig.MinDeniedCount,
 			topK);
 		return true;
 	}
@@ -77,7 +86,7 @@ public sealed class VectorSearchRuntime : IDisposable {
 	private static VectorSearchRuntime LoadExact(RuntimeConfig runtimeConfig) {
 		FlatArtifactSet artifacts = FlatArtifactSet.Load(runtimeConfig.Dataset.IndexDirectory);
 		ExactFlatSearchEngine engine = new(artifacts);
-		return new VectorSearchRuntime(runtimeConfig.Search, artifacts, engine);
+		return new VectorSearchRuntime(runtimeConfig.Detection, runtimeConfig.Search, artifacts, engine);
 	}
 
 	private static VectorSearchRuntime LoadHierarchical(RuntimeConfig runtimeConfig) {
@@ -86,6 +95,6 @@ public sealed class VectorSearchRuntime : IDisposable {
 			artifacts,
 			runtimeConfig.Search.UseLastTransactionPartitionPruning,
 			runtimeConfig.Search.UseLeafRadiusPruning);
-		return new VectorSearchRuntime(runtimeConfig.Search, artifacts, engine);
+		return new VectorSearchRuntime(runtimeConfig.Detection, runtimeConfig.Search, artifacts, engine);
 	}
 }

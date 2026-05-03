@@ -8,6 +8,7 @@ public static class RuntimeConfigFactory {
 		ValidateDetection(settings.Detection);
 		ValidateSearch(settings.Search);
 		ValidateDataset(settings.Dataset);
+		ValidateHttp(settings.Http);
 		ValidateDiagnostics(settings.Diagnostics);
 
 		RuntimeDetectionConfig detection = new(
@@ -27,13 +28,15 @@ public static class RuntimeConfigFactory {
 			settings.Search.IndexKind,
 			settings.Search.PaddedDimension,
 			settings.Search.RerankCount,
+			settings.Search.BoundaryRerankCount,
 			settings.Search.UseLeafRadiusPruning,
 			settings.Search.UseLastTransactionPartitionPruning);
 
 		RuntimeHttpConfig http = new(
 			settings.Http.ParserMode,
 			settings.Http.ResponseMode,
-			settings.Http.TransportMode);
+			settings.Http.TransportMode,
+			GetOptionalAbsolutePath(contentRootPath, settings.Http.UnixSocketPath));
 
 		RuntimeDiagnosticsConfig diagnostics = new(
 			settings.Diagnostics.ProfileEnabled,
@@ -46,6 +49,12 @@ public static class RuntimeConfigFactory {
 	private static string GetAbsolutePath(string contentRootPath, string path) {
 		ArgumentException.ThrowIfNullOrWhiteSpace(path);
 		return Path.GetFullPath(path, contentRootPath);
+	}
+
+	private static string? GetOptionalAbsolutePath(string contentRootPath, string? path) {
+		return string.IsNullOrWhiteSpace(path)
+			? null
+			: Path.GetFullPath(path, contentRootPath);
 	}
 
 	private static void ValidateDataset(DatasetSettings settings) {
@@ -67,6 +76,17 @@ public static class RuntimeConfigFactory {
 				nameof(settings.ApprovalThreshold),
 				settings.ApprovalThreshold,
 				"ApprovalThreshold must be between 0.0 and 1.0.");
+		}
+	}
+
+	private static void ValidateHttp(HttpSettings settings) {
+		ArgumentNullException.ThrowIfNull(settings);
+
+		if ((settings.TransportMode == TransportMode.UnixDomainSocket) &&
+			string.IsNullOrWhiteSpace(settings.UnixSocketPath)) {
+			throw new ArgumentException(
+				"UnixSocketPath must be provided when TransportMode is UnixDomainSocket.",
+				nameof(settings.UnixSocketPath));
 		}
 	}
 
@@ -94,6 +114,20 @@ public static class RuntimeConfigFactory {
 
 		if (settings.RerankCount <= 0) {
 			throw new ArgumentOutOfRangeException(nameof(settings.RerankCount), settings.RerankCount, "RerankCount must be greater than zero.");
+		}
+
+		if (settings.BoundaryRerankCount <= 0) {
+			throw new ArgumentOutOfRangeException(
+				nameof(settings.BoundaryRerankCount),
+				settings.BoundaryRerankCount,
+				"BoundaryRerankCount must be greater than zero.");
+		}
+
+		if (settings.BoundaryRerankCount < settings.RerankCount) {
+			throw new ArgumentOutOfRangeException(
+				nameof(settings.BoundaryRerankCount),
+				settings.BoundaryRerankCount,
+				"BoundaryRerankCount must be greater than or equal to RerankCount.");
 		}
 	}
 

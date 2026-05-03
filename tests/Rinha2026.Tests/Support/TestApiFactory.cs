@@ -26,12 +26,14 @@ internal static class TestApiFactory {
 				IndexKind: indexKind,
 				PaddedDimension: 16,
 				RerankCount: 48,
+				BoundaryRerankCount: 48,
 				UseLeafRadiusPruning: false,
 				UseLastTransactionPartitionPruning: true),
 			new RuntimeHttpConfig(
 				ParserMode: parserMode,
 				ResponseMode: ResponseMode.PrecomputedTable,
-				TransportMode: TransportMode.Tcp));
+				TransportMode: TransportMode.Tcp,
+				UnixSocketPath: null));
 
 		return new WebApplicationFactory<Program>().WithWebHostBuilder(builder => {
 			builder.UseEnvironment("Testing");

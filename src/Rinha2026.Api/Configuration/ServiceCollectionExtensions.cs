@@ -65,6 +65,9 @@ public static class ServiceCollectionExtensions {
 					configuration,
 					"Runtime:Http:TransportMode",
 					defaults.Http.TransportMode),
+				UnixSocketPath = GetOptionalString(
+					configuration,
+					"Runtime:Http:UnixSocketPath"),
 			},
 			Diagnostics = new DiagnosticsSettings {
 				ProfileEnabled = GetBoolean(
@@ -109,6 +112,10 @@ public static class ServiceCollectionExtensions {
 					configuration,
 					"Runtime:Search:RerankCount",
 					defaults.Search.RerankCount),
+				BoundaryRerankCount = GetInt32(
+					configuration,
+					"Runtime:Search:BoundaryRerankCount",
+					defaults.Search.BoundaryRerankCount),
 				UseLeafRadiusPruning = GetBoolean(
 					configuration,
 					"Runtime:Search:UseLeafRadiusPruning",
@@ -150,5 +157,10 @@ public static class ServiceCollectionExtensions {
 	private static string GetString(IConfiguration configuration, string key, string fallback) {
 		string? value = configuration[key];
 		return string.IsNullOrWhiteSpace(value) ? fallback : value;
+	}
+
+	private static string? GetOptionalString(IConfiguration configuration, string key) {
+		string? value = configuration[key];
+		return string.IsNullOrWhiteSpace(value) ? null : value;
 	}
 }

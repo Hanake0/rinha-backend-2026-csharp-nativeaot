@@ -40,6 +40,7 @@ services:
       Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-128}
       Runtime__Search__IndexKind: ${SEARCH_INDEX_KIND:-HierarchicalBeamIvf}
       Runtime__Search__RerankCount: ${SEARCH_RERANK_COUNT:-48}
+      Runtime__Search__BoundaryRerankCount: ${SEARCH_BOUNDARY_RERANK_COUNT:-48}
       Runtime__Search__UseLeafRadiusPruning: ${SEARCH_USE_LEAF_RADIUS_PRUNING:-true}
       Runtime__Search__UseLastTransactionPartitionPruning: ${SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING:-true}
     volumes:
@@ -75,6 +76,7 @@ services:
       Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-128}
       Runtime__Search__IndexKind: ${SEARCH_INDEX_KIND:-HierarchicalBeamIvf}
       Runtime__Search__RerankCount: ${SEARCH_RERANK_COUNT:-48}
+      Runtime__Search__BoundaryRerankCount: ${SEARCH_BOUNDARY_RERANK_COUNT:-48}
       Runtime__Search__UseLeafRadiusPruning: ${SEARCH_USE_LEAF_RADIUS_PRUNING:-true}
       Runtime__Search__UseLastTransactionPartitionPruning: ${SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING:-true}
     volumes:
