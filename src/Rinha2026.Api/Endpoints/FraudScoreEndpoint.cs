@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.IO.Pipelines;
 
 using Rinha2026.Api.Services;
 
@@ -46,24 +47,43 @@ public static class FraudScoreEndpoint {
 
 		int length = checked((int)request.ContentLength.Value);
 		byte[] buffer = ArrayPool<byte>.Shared.Rent(length);
+		int copied = 0;
+		PipeReader bodyReader = request.BodyReader;
 
-		int read = 0;
+		while (copied < length) {
+			ReadResult readResult = await bodyReader.ReadAsync(cancellationToken);
+			ReadOnlySequence<byte> sequence = readResult.Buffer;
+			int remaining = length - copied;
+			int bytesToCopy = (int)Math.Min(sequence.Length, remaining);
 
-		while (read < length) {
-			int bytesRead = await request.Body.ReadAsync(buffer.AsMemory(read, length - read), cancellationToken);
-
-			if (bytesRead == 0) {
-				break;
+			if (bytesToCopy > 0) {
+				CopySequence(sequence.Slice(0, bytesToCopy), buffer.AsSpan(copied, bytesToCopy));
+				copied += bytesToCopy;
 			}
 
-			read += bytesRead;
+			SequencePosition consumed = sequence.GetPosition(bytesToCopy);
+			bodyReader.AdvanceTo(consumed, consumed);
+
+			if (readResult.IsCompleted && (copied < length)) {
+				break;
+			}
 		}
 
-		if (read != length) {
+		if (copied != length) {
 			ArrayPool<byte>.Shared.Return(buffer);
 			return (null, 0);
 		}
 
 		return (buffer, length);
+	}
+
+	private static void CopySequence(ReadOnlySequence<byte> source, Span<byte> destination) {
+		int offset = 0;
+
+		foreach (ReadOnlyMemory<byte> segment in source) {
+			ReadOnlySpan<byte> segmentSpan = segment.Span;
+			segmentSpan.CopyTo(destination[offset..]);
+			offset += segmentSpan.Length;
+		}
 	}
 }

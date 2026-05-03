@@ -76,6 +76,45 @@ public sealed class ManualFraudRequestParserTests {
 		AssertRequestsEqual(reference, manual);
 	}
 
+	[Fact]
+	public void TryParseMatchesReferenceParserForOutOfOrderPayloadWithIgnoredFields() {
+		byte[] payload = Encoding.UTF8.GetBytes("""
+		{
+		  "last_transaction": {
+		    "ignored": [1, 2, 3],
+		    "km_from_current": 18.8626479774,
+		    "timestamp": "2026-03-11T14:58:35Z"
+		  },
+		  "terminal": {
+		    "km_from_home": 13.7090520965,
+		    "card_present": true,
+		    "ignored": {"x": false},
+		    "is_online": false
+		  },
+		  "merchant": {
+		    "avg_amount": 298.95,
+		    "mcc": "5912",
+		    "id": "MERC-001"
+		  },
+		  "id": "tx-3576980410",
+		  "customer": {
+		    "known_merchants": ["MERC-009", "MERC-001", "MERC-001"],
+		    "tx_count_24h": 3,
+		    "avg_amount": 769.76
+		  },
+		  "transaction": {
+		    "requested_at": "2026-03-11T20:23:35Z",
+		    "installments": 3,
+		    "amount": 384.88
+		  }
+		}
+		""");
+
+		Assert.True(ReferenceFraudRequestParser.TryParse(payload, out var reference));
+		Assert.True(ManualFraudRequestParser.TryParse(payload, out var manual));
+		AssertRequestsEqual(reference, manual);
+	}
+
 	private static void AssertRequestsEqual(
 		Rinha2026.Core.Model.FraudRequest expected,
 		Rinha2026.Core.Model.FraudRequest actual) {

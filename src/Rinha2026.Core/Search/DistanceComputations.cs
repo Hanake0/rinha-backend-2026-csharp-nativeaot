@@ -1,5 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 namespace Rinha2026.Core.Search;
 
@@ -47,6 +49,11 @@ public static class DistanceComputations {
 
 	public static int SquaredL2Q8(ReadOnlySpan<sbyte> query, ReadOnlySpan<byte> encodedVector) {
 		ReadOnlySpan<sbyte> vector = MemoryMarshal.Cast<byte, sbyte>(encodedVector);
+
+		if (Avx2.IsSupported && (vector.Length == 16) && (query.Length >= 16)) {
+			return SquaredL2Q8Vectorized(query, vector);
+		}
+
 		int distance = 0;
 
 		for (int dimension = 0; dimension < vector.Length; dimension++) {
@@ -55,5 +62,27 @@ public static class DistanceComputations {
 		}
 
 		return distance;
+	}
+	private static int SquaredL2Q8Vectorized(ReadOnlySpan<sbyte> query, ReadOnlySpan<sbyte> vector) {
+		ref sbyte queryRef = ref MemoryMarshal.GetReference(query);
+		ref sbyte vectorRef = ref MemoryMarshal.GetReference(vector);
+
+		Vector128<sbyte> queryBytes = Vector128.LoadUnsafe(ref queryRef);
+		Vector128<sbyte> vectorBytes = Vector128.LoadUnsafe(ref vectorRef);
+		Vector256<short> queryShorts = Avx2.ConvertToVector256Int16(queryBytes);
+		Vector256<short> vectorShorts = Avx2.ConvertToVector256Int16(vectorBytes);
+		Vector256<short> diff = Avx2.Subtract(queryShorts, vectorShorts);
+		Vector256<int> squares = Avx2.MultiplyAddAdjacent(diff, diff);
+
+		Span<int> lanes = stackalloc int[Vector256<int>.Count];
+		squares.CopyTo(lanes);
+
+		int total = 0;
+
+		for (int index = 0; index < lanes.Length; index++) {
+			total += lanes[index];
+		}
+
+		return total;
 	}
 }

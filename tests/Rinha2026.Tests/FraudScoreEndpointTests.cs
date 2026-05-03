@@ -58,4 +58,23 @@ public sealed class FraudScoreEndpointTests {
 		Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 		Assert.Equal("""{"approved":false,"fraud_score":0.8}""", payload);
 	}
+
+	[Fact]
+	public async Task FraudScoreReturnsBadRequestForInvalidJson() {
+		float[] queryVector = [
+			0.0041f, 0.1667f, 0.05f, 0.7826f, 0.3333f, -1f, -1f,
+			0.0292f, 0.15f, 0f, 1f, 0f, 0.15f, 0.006f,
+		];
+
+		using TemporaryRuntimeData runtimeData = await TemporaryRuntimeData.CreateAsync(
+			(queryVector.ToArray(), "fraud"),
+			(queryVector.ToArray(), "legit"));
+		using var factory = TestApiFactory.Create(runtimeData, IndexKind.ExactSampleOnly);
+		using HttpClient client = factory.CreateClient();
+		using StringContent content = new("@/data/payload.json", Encoding.UTF8, "application/json");
+
+		HttpResponseMessage response = await client.PostAsync("/fraud-score", content);
+
+		Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+	}
 }

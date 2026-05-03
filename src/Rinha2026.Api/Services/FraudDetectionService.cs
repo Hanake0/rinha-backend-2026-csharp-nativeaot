@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Rinha2026.Core.Configuration;
 using Rinha2026.Core.Detection;
 using Rinha2026.Core.Model;
@@ -8,6 +10,12 @@ using Rinha2026.Core.Vectorization;
 namespace Rinha2026.Api.Services;
 
 public sealed class FraudDetectionService : IDisposable {
+	[ThreadStatic]
+	private static SearchHit[]? hitScratchBuffer;
+
+	[ThreadStatic]
+	private static float[]? vectorScratchBuffer;
+
 	private readonly MccRiskTable mccRiskTable;
 	private readonly NormalizationConstants normalizationConstants;
 	private readonly RuntimeConfig runtimeConfig;
@@ -51,11 +59,13 @@ public sealed class FraudDetectionService : IDisposable {
 			return false;
 		}
 
-		Span<float> vector = stackalloc float[FraudVectorizer.PaddedDimension];
+		float[] vectorBuffer = GetVectorScratchBuffer(FraudVectorizer.PaddedDimension);
+		Span<float> vector = vectorBuffer.AsSpan(0, FraudVectorizer.PaddedDimension);
 		FraudVectorizer.WriteVector(request, this.normalizationConstants, this.mccRiskTable, vector);
 
 		int topK = this.runtimeConfig.Detection.TopK;
-		Span<SearchHit> hits = topK <= 16 ? stackalloc SearchHit[topK] : new SearchHit[topK];
+		SearchHit[] hitsBuffer = GetHitScratchBuffer(topK);
+		Span<SearchHit> hits = hitsBuffer.AsSpan(0, topK);
 		int fraudCount = this.searchRuntime.CountFraud(vector, hits);
 		response = this.responseCache.GetResponse(fraudCount);
 		return true;
@@ -63,11 +73,38 @@ public sealed class FraudDetectionService : IDisposable {
 
 	public void Dispose() => this.searchRuntime.Dispose();
 
+	private static SearchHit[] GetHitScratchBuffer(int length) {
+		SearchHit[] buffer = hitScratchBuffer ?? Array.Empty<SearchHit>();
+
+		if (buffer.Length < length) {
+			buffer = new SearchHit[length];
+			hitScratchBuffer = buffer;
+		}
+
+		return buffer;
+	}
+
+	private static float[] GetVectorScratchBuffer(int length) {
+		float[] buffer = vectorScratchBuffer ?? Array.Empty<float>();
+
+		if (buffer.Length < length) {
+			buffer = new float[length];
+			vectorScratchBuffer = buffer;
+		}
+
+		return buffer;
+	}
+
 	private static bool TryParse(ReadOnlySpan<byte> payload, ParserMode parserMode, out FraudRequest request) {
-		return parserMode switch {
-			ParserMode.Manual => ManualFraudRequestParser.TryParse(payload, out request),
-			ParserMode.ReferenceStj => ReferenceFraudRequestParser.TryParse(payload, out request),
-			_ => throw new NotSupportedException($"Unsupported parser mode '{parserMode}'."),
-		};
+		try {
+			return parserMode switch {
+				ParserMode.Manual => ManualFraudRequestParser.TryParse(payload, out request),
+				ParserMode.ReferenceStj => ReferenceFraudRequestParser.TryParse(payload, out request),
+				_ => throw new NotSupportedException($"Unsupported parser mode '{parserMode}'."),
+			};
+		} catch (JsonException) {
+			request = default;
+			return false;
+		}
 	}
 }
