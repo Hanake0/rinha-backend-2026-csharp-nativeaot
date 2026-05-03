@@ -26,7 +26,7 @@
 
 ## Current exploration stage
 
-- stage: `search-path optimization and runtime memory shaping`
+- stage: `architecture pivot: custom lb + shared search service`
 - active objectives:
   - `FP = 0`
   - `FN = 0`
@@ -38,11 +38,12 @@
   - AVX-specific f32 rerank distance path
   - adaptive boundary rerank fallback promoted from `32 -> 48`
   - unix-domain-socket transport stack
+  - in-process artifact memory promotion
 - next candidate branch:
-  - promote hot read-mostly index structures into process memory
-  - add explicit startup page warming for the large mapped vector files
-  - benchmark whether a custom load balancer can beat nginx under the same envelope
-  - only then escalate to deeper exact-search rewrites
+  - rules-check a `lb + api1 + api2 + searchd` topology
+  - keep the APIs minimal and move the shared index into one process
+  - benchmark a purpose-built load balancer against nginx under the same envelope
+  - only keep the pivot if the extra hop buys back more latency than it costs
 
 ## Current validated candidate shape
 
@@ -117,6 +118,11 @@
 - short transport knob check:
   - forcing `Runtime:Http:IoQueueCount = 0` was slightly worse than the short exact baseline
   - not promoted
+- memory-mode branch:
+  - `PromoteMetadata` looked slightly better in host-side micro and evaluator runs
+  - constrained compose regressed sharply to `2.04 ms`
+  - `PromoteMetadataAndQuantizedVectors` regressed further to `3.22 ms`
+  - rejected
 
 ## Latest profiling anchors
 
@@ -142,6 +148,7 @@
 
 - `benchmarks/results/stack/2026-05-03-round4-stable-summary.md`
 - `benchmarks/results/stack/2026-05-03-adaptive-transport-memory-summary.md`
+- `benchmarks/results/stack/2026-05-03-memory-mode-promotion-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-noavx.json`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-partition-on.json`
