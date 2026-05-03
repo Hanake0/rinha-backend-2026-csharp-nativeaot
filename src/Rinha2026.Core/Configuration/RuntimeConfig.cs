@@ -4,7 +4,8 @@ public readonly record struct RuntimeConfig(
 	RuntimeDetectionConfig Detection,
 	RuntimeDatasetConfig Dataset,
 	RuntimeSearchConfig Search,
-	RuntimeHttpConfig Http);
+	RuntimeHttpConfig Http,
+	RuntimeDiagnosticsConfig Diagnostics = default);
 
 public readonly record struct RuntimeDetectionConfig(
 	int TopK,
@@ -30,3 +31,8 @@ public readonly record struct RuntimeHttpConfig(
 	ParserMode ParserMode,
 	ResponseMode ResponseMode,
 	TransportMode TransportMode);
+
+public readonly record struct RuntimeDiagnosticsConfig(
+	bool ProfileEnabled,
+	int ProfileSampleCapacity,
+	int ProfileSamplingStride);

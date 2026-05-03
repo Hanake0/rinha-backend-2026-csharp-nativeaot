@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.IO.Pipelines;
 
 using Rinha2026.Api.Services;
@@ -10,12 +11,14 @@ public static class FraudScoreEndpoint {
 		HttpContext context,
 		StartupState startupState,
 		FraudRuntimeState runtimeState,
+		RequestProfileCollector requestProfileCollector,
 		CancellationToken cancellationToken) {
 		if (!startupState.IsReady || !runtimeState.TryGet(out FraudDetectionService? detectionService) || (detectionService is null)) {
 			context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
 			return;
 		}
 
+		long requestStart = requestProfileCollector.IsEnabled ? Stopwatch.GetTimestamp() : 0L;
 		(byte[]? rentedBuffer, int length) = await TryReadPayloadAsync(context.Request, cancellationToken);
 
 		if (rentedBuffer is null) {
@@ -24,7 +27,25 @@ public static class FraudScoreEndpoint {
 		}
 
 		try {
-			if (!detectionService.TryHandle(rentedBuffer.AsSpan(0, length), out ReadOnlyMemory<byte> response)) {
+			if (!requestProfileCollector.IsEnabled) {
+				if (!detectionService.TryHandle(rentedBuffer.AsSpan(0, length), out ReadOnlyMemory<byte> responsePayload)) {
+					context.Response.StatusCode = StatusCodes.Status400BadRequest;
+					return;
+				}
+
+				context.Response.StatusCode = StatusCodes.Status200OK;
+				context.Response.ContentType = "application/json";
+				context.Response.ContentLength = responsePayload.Length;
+				await context.Response.BodyWriter.WriteAsync(responsePayload, cancellationToken);
+				return;
+			}
+
+			long afterRead = Stopwatch.GetTimestamp();
+
+			if (!detectionService.TryHandle(
+				rentedBuffer.AsSpan(0, length),
+				out ReadOnlyMemory<byte> response,
+				out FraudDetectionProfile detectionProfile)) {
 				context.Response.StatusCode = StatusCodes.Status400BadRequest;
 				return;
 			}
@@ -32,7 +53,16 @@ public static class FraudScoreEndpoint {
 			context.Response.StatusCode = StatusCodes.Status200OK;
 			context.Response.ContentType = "application/json";
 			context.Response.ContentLength = response.Length;
+			long beforeWrite = Stopwatch.GetTimestamp();
 			await context.Response.BodyWriter.WriteAsync(response, cancellationToken);
+			long afterWrite = Stopwatch.GetTimestamp();
+			requestProfileCollector.Record(
+				afterRead - requestStart,
+				detectionProfile.ParseTicks,
+				detectionProfile.VectorizeTicks,
+				detectionProfile.SearchTicks,
+				afterWrite - beforeWrite,
+				afterWrite - requestStart);
 		} finally {
 			ArrayPool<byte>.Shared.Return(rentedBuffer);
 		}

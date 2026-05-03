@@ -25,6 +25,9 @@ public sealed class ServiceCollectionExtensionsTests {
 			["Runtime:Http:ParserMode"] = "ReferenceStj",
 			["Runtime:Http:ResponseMode"] = "PrecomputedTable",
 			["Runtime:Http:TransportMode"] = "Tcp",
+			["Runtime:Diagnostics:ProfileEnabled"] = "true",
+			["Runtime:Diagnostics:ProfileSampleCapacity"] = "2048",
+			["Runtime:Diagnostics:ProfileSamplingStride"] = "32",
 		};
 
 		IConfiguration configuration = new ConfigurationBuilder()
@@ -43,6 +46,9 @@ public sealed class ServiceCollectionExtensionsTests {
 		Assert.Equal(17, runtimeConfig.Search.BeamLevel2);
 		Assert.Equal(68, runtimeConfig.Search.RerankCount);
 		Assert.Equal(ParserMode.ReferenceStj, runtimeConfig.Http.ParserMode);
+		Assert.True(runtimeConfig.Diagnostics.ProfileEnabled);
+		Assert.Equal(2048, runtimeConfig.Diagnostics.ProfileSampleCapacity);
+		Assert.Equal(32, runtimeConfig.Diagnostics.ProfileSamplingStride);
 		Assert.EndsWith("custom-index", runtimeConfig.Dataset.IndexDirectory, StringComparison.Ordinal);
 		Assert.EndsWith("custom-mcc.json", runtimeConfig.Dataset.MccRiskPath, StringComparison.Ordinal);
 		Assert.EndsWith("custom-normalization.json", runtimeConfig.Dataset.NormalizationPath, StringComparison.Ordinal);

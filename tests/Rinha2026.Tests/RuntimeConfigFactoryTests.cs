@@ -23,6 +23,9 @@ public sealed class RuntimeConfigFactoryTests {
 		Assert.Equal(32, runtimeConfig.Search.BeamLevel2);
 		Assert.Equal(48, runtimeConfig.Search.RerankCount);
 		Assert.Equal(6, runtimeConfig.Detection.ResponseCount);
+		Assert.False(runtimeConfig.Diagnostics.ProfileEnabled);
+		Assert.Equal(8192, runtimeConfig.Diagnostics.ProfileSampleCapacity);
+		Assert.Equal(64, runtimeConfig.Diagnostics.ProfileSamplingStride);
 	}
 
 	[Fact]
@@ -53,6 +56,28 @@ public sealed class RuntimeConfigFactoryTests {
 			Search = new SearchSettings {
 				Dimension = 14,
 				PaddedDimension = 13,
+			},
+		};
+
+		Assert.Throws<ArgumentOutOfRangeException>(() => RuntimeConfigFactory.Create(settings, AppContext.BaseDirectory));
+	}
+
+	[Fact]
+	public void CreateRejectsInvalidProfileSampleCapacity() {
+		RuntimeSettings settings = new() {
+			Diagnostics = new DiagnosticsSettings {
+				ProfileSampleCapacity = 0,
+			},
+		};
+
+		Assert.Throws<ArgumentOutOfRangeException>(() => RuntimeConfigFactory.Create(settings, AppContext.BaseDirectory));
+	}
+
+	[Fact]
+	public void CreateRejectsInvalidProfileSamplingStride() {
+		RuntimeSettings settings = new() {
+			Diagnostics = new DiagnosticsSettings {
+				ProfileSamplingStride = 0,
 			},
 		};
 

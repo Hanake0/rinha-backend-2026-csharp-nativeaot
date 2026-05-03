@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 using Rinha2026.Core.Configuration;
@@ -53,21 +54,54 @@ public sealed class FraudDetectionService : IDisposable {
 	}
 
 	public bool TryHandle(ReadOnlySpan<byte> payload, out ReadOnlyMemory<byte> response) {
+		if (!this.TryHandleCore(payload, out response, out FraudDetectionProfile? _)) {
+			return false;
+		}
+
+		return true;
+	}
+
+	public bool TryHandle(
+		ReadOnlySpan<byte> payload,
+		out ReadOnlyMemory<byte> response,
+		out FraudDetectionProfile detectionProfile) {
+		if (!this.TryHandleCore(payload, out response, out FraudDetectionProfile? profile) || (profile is null)) {
+			detectionProfile = default;
+			return false;
+		}
+
+		detectionProfile = profile.Value;
+		return true;
+	}
+
+	private bool TryHandleCore(
+		ReadOnlySpan<byte> payload,
+		out ReadOnlyMemory<byte> response,
+		out FraudDetectionProfile? detectionProfile) {
 		response = default;
+		detectionProfile = default;
+		long parseStart = Stopwatch.GetTimestamp();
 
 		if (!TryParse(payload, this.runtimeConfig.Http.ParserMode, out FraudRequest request)) {
 			return false;
 		}
 
+		long vectorizationStart = Stopwatch.GetTimestamp();
 		float[] vectorBuffer = GetVectorScratchBuffer(FraudVectorizer.PaddedDimension);
 		Span<float> vector = vectorBuffer.AsSpan(0, FraudVectorizer.PaddedDimension);
 		FraudVectorizer.WriteVector(request, this.normalizationConstants, this.mccRiskTable, vector);
 
+		long searchStart = Stopwatch.GetTimestamp();
 		int topK = this.runtimeConfig.Detection.TopK;
 		SearchHit[] hitsBuffer = GetHitScratchBuffer(topK);
 		Span<SearchHit> hits = hitsBuffer.AsSpan(0, topK);
 		int fraudCount = this.searchRuntime.CountFraud(vector, hits);
 		response = this.responseCache.GetResponse(fraudCount);
+		long end = Stopwatch.GetTimestamp();
+		detectionProfile = new FraudDetectionProfile(
+			vectorizationStart - parseStart,
+			searchStart - vectorizationStart,
+			end - searchStart);
 		return true;
 	}
 
@@ -108,3 +142,8 @@ public sealed class FraudDetectionService : IDisposable {
 		}
 	}
 }
+
+public readonly record struct FraudDetectionProfile(
+	long ParseTicks,
+	long VectorizeTicks,
+	long SearchTicks);

@@ -8,6 +8,7 @@ public static class RuntimeConfigFactory {
 		ValidateDetection(settings.Detection);
 		ValidateSearch(settings.Search);
 		ValidateDataset(settings.Dataset);
+		ValidateDiagnostics(settings.Diagnostics);
 
 		RuntimeDetectionConfig detection = new(
 			settings.Detection.TopK,
@@ -32,7 +33,12 @@ public static class RuntimeConfigFactory {
 			settings.Http.ResponseMode,
 			settings.Http.TransportMode);
 
-		return new RuntimeConfig(detection, dataset, search, http);
+		RuntimeDiagnosticsConfig diagnostics = new(
+			settings.Diagnostics.ProfileEnabled,
+			settings.Diagnostics.ProfileSampleCapacity,
+			settings.Diagnostics.ProfileSamplingStride);
+
+		return new RuntimeConfig(detection, dataset, search, http, diagnostics);
 	}
 
 	private static string GetAbsolutePath(string contentRootPath, string path) {
@@ -86,6 +92,24 @@ public static class RuntimeConfigFactory {
 
 		if (settings.RerankCount <= 0) {
 			throw new ArgumentOutOfRangeException(nameof(settings.RerankCount), settings.RerankCount, "RerankCount must be greater than zero.");
+		}
+	}
+
+	private static void ValidateDiagnostics(DiagnosticsSettings settings) {
+		ArgumentNullException.ThrowIfNull(settings);
+
+		if (settings.ProfileSampleCapacity <= 0) {
+			throw new ArgumentOutOfRangeException(
+				nameof(settings.ProfileSampleCapacity),
+				settings.ProfileSampleCapacity,
+				"ProfileSampleCapacity must be greater than zero.");
+		}
+
+		if (settings.ProfileSamplingStride <= 0) {
+			throw new ArgumentOutOfRangeException(
+				nameof(settings.ProfileSamplingStride),
+				settings.ProfileSamplingStride,
+				"ProfileSamplingStride must be greater than zero.");
 		}
 	}
 }

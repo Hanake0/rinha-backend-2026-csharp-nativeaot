@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions {
 
 		services.AddSingleton(typeof(RuntimeConfig), runtimeConfig);
 		services.AddSingleton<FraudRuntimeState>();
+		services.AddSingleton<RequestProfileCollector>(_ => new RequestProfileCollector(runtimeConfig.Diagnostics));
 		services.AddSingleton<StartupState>();
 		services.AddHostedService<StartupInitializationService>();
 
@@ -65,6 +66,20 @@ public static class ServiceCollectionExtensions {
 					"Runtime:Http:TransportMode",
 					defaults.Http.TransportMode),
 			},
+			Diagnostics = new DiagnosticsSettings {
+				ProfileEnabled = GetBoolean(
+					configuration,
+					"Runtime:Diagnostics:ProfileEnabled",
+					defaults.Diagnostics.ProfileEnabled),
+				ProfileSampleCapacity = GetInt32(
+					configuration,
+					"Runtime:Diagnostics:ProfileSampleCapacity",
+					defaults.Diagnostics.ProfileSampleCapacity),
+				ProfileSamplingStride = GetInt32(
+					configuration,
+					"Runtime:Diagnostics:ProfileSamplingStride",
+					defaults.Diagnostics.ProfileSamplingStride),
+			},
 			Search = new SearchSettings {
 				BeamLevel1 = GetInt32(
 					configuration,
@@ -96,6 +111,11 @@ public static class ServiceCollectionExtensions {
 					defaults.Search.RerankCount),
 			},
 		};
+	}
+
+	private static bool GetBoolean(IConfiguration configuration, string key, bool fallback) {
+		string? value = configuration[key];
+		return bool.TryParse(value, out bool parsedValue) ? parsedValue : fallback;
 	}
 
 	private static double GetDouble(IConfiguration configuration, string key, double fallback) {

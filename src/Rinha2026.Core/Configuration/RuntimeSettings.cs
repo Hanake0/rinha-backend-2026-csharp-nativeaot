@@ -10,6 +10,8 @@ public sealed class RuntimeSettings {
 	public SearchSettings Search { get; init; } = new();
 
 	public HttpSettings Http { get; init; } = new();
+
+	public DiagnosticsSettings Diagnostics { get; init; } = new();
 }
 
 public sealed class DetectionSettings {
@@ -48,4 +50,12 @@ public sealed class HttpSettings {
 	public ResponseMode ResponseMode { get; init; } = ResponseMode.PrecomputedTable;
 
 	public TransportMode TransportMode { get; init; } = TransportMode.Tcp;
+}
+
+public sealed class DiagnosticsSettings {
+	public bool ProfileEnabled { get; init; }
+
+	public int ProfileSampleCapacity { get; init; } = 8192;
+
+	public int ProfileSamplingStride { get; init; } = 64;
 }

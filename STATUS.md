@@ -12,6 +12,7 @@
 - [x] Dockerized NativeAOT API image
 - [x] 1 LB + 2 API compose stack
 - [x] Constrained compose benchmark harness
+- [x] Real-stack request-stage and memory profiling harness
 - [x] Final stack validation and submission packaging
 
 ## Latest validated commits
@@ -20,6 +21,18 @@
 - `5bf2722` `✨ feat(search): add exact flat artifact baseline`
 - `21aa150` `✨ feat(index): add hierarchical beam ivf search path`
 - `4be4071` `✨ feat(api): add fraud scoring runtime and endpoint`
+
+## Current exploration stage
+
+- stage: `search-path optimization`
+- active objective:
+  - `FP = 0`
+  - `FN = 0`
+  - full-stack `p99 < 1.0 ms`, stretch `p99 < 0.5 ms`
+- current measured blocker:
+  - search dominates the service-side tail under the real `900 req/s` constrained stack
+- next candidate branch:
+  - reduce candidate scan volume before touching transport or parser internals
 
 ## Current default submission shape
 
@@ -62,15 +75,41 @@
 - full compliant stack, current default compose:
   - latest validated run: `p99 = 2.38 ms`, final score `5157.29`
   - best observed run: `p99 = 2.30 ms`, final score `5172.24`
+
+## Latest profiling anchors
+
+- profiling command:
+  - `powershell -ExecutionPolicy Bypass -File scripts\profile-compose.ps1 -BeamLevel1 10 -BeamLevel2 32 -RerankCount 48 -TopK 5 -ApprovalThreshold 0.6 -HttpParserMode Manual -HttpIoQueueCount 0 -HttpInlineScheduling true -HttpNoDelay true -LbCpus 0.20 -ApiCpus 0.40 -LbMemLimit 48m -ApiMemLimit 151m`
+- API1 sampled profile:
+  - `bodyReadUs p50/p99 = 2.11 / 6.04`
+  - `parseUs p50/p99 = 2.49 / 4.71`
+  - `vectorizeUs p50/p99 = 0.41 / 1.40`
+  - `searchUs p50/p99 = 360.26 / 1822.08`
+  - `responseWriteUs p50/p99 = 38.68 / 70.58`
+  - `totalUs p50/p99 = 408.63 / 1865.04`
+- API2 sampled profile:
+  - `bodyReadUs p50/p99 = 2.20 / 16.03`
+  - `parseUs p50/p99 = 2.63 / 5.38`
+  - `vectorizeUs p50/p99 = 0.41 / 1.67`
+  - `searchUs p50/p99 = 237.46 / 1869.75`
+  - `responseWriteUs p50/p99 = 38.19 / 67.69`
+  - `totalUs p50/p99 = 281.06 / 1925.38`
+- memory under load:
+  - APIs stabilized around `16.4-16.5 MiB / 151 MiB`
+  - LB stabilized around `9.3 MiB / 48 MiB`
+- direct implication:
+  - parser, vectorizer, and write path are already cheap
+  - the next real win has to come from search-path selectivity and kernel efficiency
   - historical one-off on a nearby config: `p99 = 2.25 ms`, final score `5176.54` with `8/32/64`
 
 See:
 
 - `benchmarks/results/stack/2026-05-03-stack-summary.md`
+- `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `artifacts/compose-k6/k6-workdir/test/results.json`
 
 ## Current caveats
 
 - The stack is compliant and self-contained, but it is still well above the `0.5 ms` target.
-- The present bottleneck is the search path under the real `900 req/s` full-stack run, not correctness or startup stability.
+- The present bottleneck is the search path under the real `900 req/s` full-stack run, not correctness, JSON parsing, or startup stability.
 - Best measured submission score is in the `~5.17k` range, not the `6k` target.

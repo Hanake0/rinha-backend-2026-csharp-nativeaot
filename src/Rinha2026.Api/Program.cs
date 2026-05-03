@@ -17,6 +17,20 @@ app.MapGet(
 		: Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
 app.MapPost("/fraud-score", FraudScoreEndpoint.HandleAsync);
 
+RequestProfileCollector requestProfileCollector = app.Services.GetRequiredService<RequestProfileCollector>();
+
+if (requestProfileCollector.IsEnabled) {
+	app.MapGet(
+		"/debug/profile",
+		static (RequestProfileCollector collector) => Results.Json(
+			collector.Snapshot(),
+			Rinha2026.Api.ApiJsonContext.Default.RequestProfileSnapshot));
+	app.MapPost("/debug/profile/reset", static (RequestProfileCollector collector) => {
+		collector.Reset();
+		return Results.Ok();
+	});
+}
+
 app.Run();
 
 public partial class Program {
