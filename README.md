@@ -19,14 +19,14 @@ Planning documents live outside this repo in [`../plans`](../plans/).
 - search mode: `HierarchicalBeamIvf`
 - default search settings:
   - `beamLevel1 = 8`
-  - `beamLevel2 = 48`
+  - `beamLevel2 = 72`
   - `rerankCount = 48`
   - `topK = 5`
   - `approvalThreshold = 0.6`
 - constrained runtime split:
-  - `lb = 0.20 CPU / 48 MB`
-  - `api1 = 0.40 CPU / 151 MB`
-  - `api2 = 0.40 CPU / 151 MB`
+  - `lb = 0.15 CPU / 48 MB`
+  - `api1 = 0.425 CPU / 151 MB`
+  - `api2 = 0.425 CPU / 151 MB`
 
 ## Workflow
 
@@ -91,7 +91,7 @@ Official corpus evaluator:
 powershell -ExecutionPolicy Bypass -File .\scripts\evaluate-official.ps1 `
   -ParseMode ServiceManual `
   -BeamLevel1 8 `
-  -BeamLevel2 48 `
+  -BeamLevel2 72 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6
@@ -112,7 +112,7 @@ Constrained full-stack benchmark:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\benchmark-official-compose.ps1 `
   -BeamLevel1 8 `
-  -BeamLevel2 48 `
+  -BeamLevel2 72 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6 `
@@ -120,8 +120,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\benchmark-official-compose.ps
   -HttpIoQueueCount 0 `
   -HttpInlineScheduling true `
   -HttpNoDelay true `
-  -LbCpus 0.20 `
-  -ApiCpus 0.40 `
+  -LbCpus 0.15 `
+  -ApiCpus 0.425 `
   -LbMemLimit 48m `
   -ApiMemLimit 151m
 ```

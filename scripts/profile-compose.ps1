@@ -10,14 +10,14 @@ param(
 	[string]$HttpIoQueueCount = "",
 	[string]$HttpNoDelay = "",
 	[string]$HttpParserMode = "Manual",
-	[int]$BeamLevel1 = 10,
-	[int]$BeamLevel2 = 32,
+	[int]$BeamLevel1 = 8,
+	[int]$BeamLevel2 = 72,
 	[string]$SearchIndexKind = "HierarchicalBeamIvf",
 	[int]$RerankCount = 48,
 	[bool]$UseLastTransactionPartitionPruning = $true,
 	[int]$TopK = 5,
-	[double]$LbCpus = 0.20,
-	[double]$ApiCpus = 0.40,
+	[double]$LbCpus = 0.15,
+	[double]$ApiCpus = 0.425,
 	[string]$LbMemLimit = "48m",
 	[string]$ApiMemLimit = "151m"
 )

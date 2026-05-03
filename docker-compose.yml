@@ -9,12 +9,12 @@ services:
     depends_on:
       - api1
       - api2
-    cpus: ${LB_CPUS:-0.20}
+    cpus: ${LB_CPUS:-0.15}
     mem_limit: ${LB_MEM_LIMIT:-48m}
     deploy:
       resources:
         limits:
-          cpus: "${LB_CPUS:-0.20}"
+          cpus: "${LB_CPUS:-0.15}"
           memory: ${LB_MEM_LIMIT_DEPLOY:-48M}
 
   api1:
@@ -33,19 +33,19 @@ services:
       Runtime__Http__NoDelay: ${HTTP_NO_DELAY:-}
       Runtime__Http__ParserMode: ${HTTP_PARSER_MODE:-Manual}
       Runtime__Http__UnsafePreferInlineScheduling: ${HTTP_INLINE_SCHEDULING:-}
-      Runtime__Search__BeamLevel1: ${SEARCH_BEAM_LEVEL1:-10}
-      Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-32}
+      Runtime__Search__BeamLevel1: ${SEARCH_BEAM_LEVEL1:-8}
+      Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-72}
       Runtime__Search__IndexKind: ${SEARCH_INDEX_KIND:-HierarchicalBeamIvf}
       Runtime__Search__RerankCount: ${SEARCH_RERANK_COUNT:-48}
       Runtime__Search__UseLastTransactionPartitionPruning: ${SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING:-true}
     volumes:
       - ${RUNTIME_DATA_DIR:-./runtime-data}:/app/data:ro
-    cpus: ${API_CPUS:-0.40}
+    cpus: ${API_CPUS:-0.425}
     mem_limit: ${API_MEM_LIMIT:-151m}
     deploy:
       resources:
         limits:
-          cpus: "${API_CPUS:-0.40}"
+          cpus: "${API_CPUS:-0.425}"
           memory: ${API_MEM_LIMIT_DEPLOY:-151M}
 
   api2:
@@ -64,17 +64,17 @@ services:
       Runtime__Http__NoDelay: ${HTTP_NO_DELAY:-}
       Runtime__Http__ParserMode: ${HTTP_PARSER_MODE:-Manual}
       Runtime__Http__UnsafePreferInlineScheduling: ${HTTP_INLINE_SCHEDULING:-}
-      Runtime__Search__BeamLevel1: ${SEARCH_BEAM_LEVEL1:-10}
-      Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-32}
+      Runtime__Search__BeamLevel1: ${SEARCH_BEAM_LEVEL1:-8}
+      Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-72}
       Runtime__Search__IndexKind: ${SEARCH_INDEX_KIND:-HierarchicalBeamIvf}
       Runtime__Search__RerankCount: ${SEARCH_RERANK_COUNT:-48}
       Runtime__Search__UseLastTransactionPartitionPruning: ${SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING:-true}
     volumes:
       - ${RUNTIME_DATA_DIR:-./runtime-data}:/app/data:ro
-    cpus: ${API_CPUS:-0.40}
+    cpus: ${API_CPUS:-0.425}
     mem_limit: ${API_MEM_LIMIT:-151m}
     deploy:
       resources:
         limits:
-          cpus: "${API_CPUS:-0.40}"
+          cpus: "${API_CPUS:-0.425}"
           memory: ${API_MEM_LIMIT_DEPLOY:-151M}

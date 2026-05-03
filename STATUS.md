@@ -32,10 +32,10 @@
 - current measured blocker:
   - search dominates the service-side tail under the real `900 req/s` constrained stack
 - next candidate branch:
-  - systematic search frontier work from the promoted `512x64` artifact baseline
+  - leaf-level pruning, alternate ANN structures, or search kernels that cut scan count without giving back the `256x128` topology gains
 - latest completed experiment:
-  - new `512x64` hierarchical artifact plus beam/rerank frontier sweep under the official evaluator and constrained compose
-  - result: materially better full-stack tradeoff than the old `512x32` default, but still short of `0 FP / 0 FN` and `< 1 ms p99`
+  - topology sweep plus constrained compose frontier on `256x128`, followed by LB/API CPU split tuning
+  - result: new measured best full-stack score on `8/72/48`, but still short of `0 FP / 0 FN` and `< 1 ms p99`
 
 ## Current default submission shape
 
@@ -43,13 +43,13 @@
 - API runtime: `.NET 10 NativeAOT`
 - dataset artifact: `runtime-data/`
 - runtime-data provenance:
-  - promoted source build directory: `runtime-data-512x64-s524k`
-  - topology: `L1 = 512`, `L2 per L1 = 64`
+  - promoted source build directory: `runtime-data-256x128-s524k`
+  - topology: `L1 = 256`, `L2 per L1 = 128`
   - training sample size: `524,288`
   - k-means iterations: `12`
 - search runtime:
   - `beamLevel1 = 8`
-  - `beamLevel2 = 48`
+  - `beamLevel2 = 72`
   - `rerankCount = 48`
   - `topK = 5`
   - `approvalThreshold = 0.6`
@@ -58,9 +58,9 @@
   - `Runtime:Http:UnsafePreferInlineScheduling = true`
   - `Runtime:Http:NoDelay = true`
 - constrained resource split:
-  - `lb = 0.20 CPU / 48 MB`
-  - `api1 = 0.40 CPU / 151 MB`
-  - `api2 = 0.40 CPU / 151 MB`
+  - `lb = 0.15 CPU / 48 MB`
+  - `api1 = 0.425 CPU / 151 MB`
+  - `api2 = 0.425 CPU / 151 MB`
 
 ## Latest benchmark anchors
 
@@ -73,48 +73,49 @@
 - end-to-end detection pipeline, exact: `~96.2 us`
 - end-to-end detection pipeline, approximate: `~3.57 us`
 - full-corpus evaluator, current default artifact:
-  - `FP = 6`
-  - `FN = 12`
-  - detection score `2509.96`
+  - `FP = 2`
+  - `FN = 5`
+  - detection score `2623.42`
   - search latency after rerank lookup:
-    - `p50 = 114.2 us`
-    - `p95 = 590.7 us`
-    - `p99 = 713.1 us`
-    - `mean = 240.4 us`
+    - `p50 = 114.8 us`
+    - `p95 = 666.2 us`
+    - `p99 = 743.8 us`
+    - `mean = 270.4 us`
 - full compliant stack, current default compose:
-  - latest validated run: `p99 = 1.89 ms`, final score `5233.41`
-  - best observed run: `p99 = 1.89 ms`, final score `5234.56`
-  - detection result: `FP = 6`, `FN = 12`, `http_errors = 0`
+  - latest validated run: `p99 = 2.08 ms`, final score `5306.37`
+  - best observed run: `p99 = 2.06 ms`, final score `5309.78`
+  - detection result: `FP = 2`, `FN = 5`, `http_errors = 0`
 - best evaluator-side detection candidate on the current artifact family:
-  - config: `beamLevel1 = 10`, `beamLevel2 = 96`, `rerankCount = 48`
+  - config: `beamLevel1 = 8`, `beamLevel2 = 96`, `rerankCount = 48`
   - `FP = 1`
   - `FN = 3`
   - detection score `2687.58`
-  - evaluator search latency `p99 = 1292.1 us`
-  - not promoted because it pushed the stack further away from the latency target
+  - evaluator search latency `p99 = 943.9 us`
+  - compose result: `p99 = 3.84 ms`, final score `5103.25`
+  - not promoted because the real stack tail collapsed
 
 ## Latest profiling anchors
 
 - profiling command:
-  - `powershell -ExecutionPolicy Bypass -File scripts\profile-compose.ps1 -RuntimeDataDir runtime-data-512x64-s524k -BeamLevel1 8 -BeamLevel2 48 -RerankCount 48 -TopK 5 -ApprovalThreshold 0.6 -HttpParserMode Manual -HttpIoQueueCount 0 -HttpInlineScheduling true -HttpNoDelay true -LbCpus 0.20 -ApiCpus 0.40 -LbMemLimit 48m -ApiMemLimit 151m -UseLastTransactionPartitionPruning:$true`
+  - `powershell -ExecutionPolicy Bypass -File scripts\profile-compose.ps1 -RuntimeDataDir runtime-data-256x128-s524k -BeamLevel1 8 -BeamLevel2 72 -RerankCount 48 -TopK 5 -ApprovalThreshold 0.6 -HttpParserMode Manual -HttpIoQueueCount 0 -HttpInlineScheduling true -HttpNoDelay true -LbCpus 0.15 -ApiCpus 0.425 -LbMemLimit 48m -ApiMemLimit 151m -UseLastTransactionPartitionPruning:$true`
 - API1 sampled profile:
-  - `bodyReadUs p50/p99 = 1.82 / 6.01`
-  - `parseUs p50/p99 = 2.39 / 4.91`
-  - `vectorizeUs p50/p99 = 0.35 / 1.05`
-  - `searchUs p50/p99 = 280.22 / 1457.23`
-  - `responseWriteUs p50/p99 = 36.99 / 60.87`
-  - `totalUs p50/p99 = 327.36 / 1507.60`
+  - `bodyReadUs p50/p99 = 1.94 / 3.74`
+  - `parseUs p50/p99 = 2.41 / 4.18`
+  - `vectorizeUs p50/p99 = 0.36 / 0.90`
+  - `searchUs p50/p99 = 247.58 / 1667.81`
+  - `responseWriteUs p50/p99 = 36.84 / 67.94`
+  - `totalUs p50/p99 = 290.16 / 1722.14`
 - API2 sampled profile:
-  - `bodyReadUs p50/p99 = 1.79 / 7.71`
-  - `parseUs p50/p99 = 2.38 / 5.08`
-  - `vectorizeUs p50/p99 = 0.37 / 1.42`
-  - `searchUs p50/p99 = 204.70 / 1526.61`
-  - `responseWriteUs p50/p99 = 37.14 / 62.46`
-  - `totalUs p50/p99 = 251.55 / 1570.78`
+  - `bodyReadUs p50/p99 = 1.92 / 5.04`
+  - `parseUs p50/p99 = 2.41 / 4.26`
+  - `vectorizeUs p50/p99 = 0.38 / 1.31`
+  - `searchUs p50/p99 = 211.47 / 1573.08`
+  - `responseWriteUs p50/p99 = 36.84 / 54.58`
+  - `totalUs p50/p99 = 257.44 / 1621.98`
 - memory under load:
-  - `api1` max observed `16.77 MiB / 151 MiB`
-  - `api2` max observed `16.89 MiB / 151 MiB`
-  - `lb` max observed `5.38 MiB / 48 MiB`
+  - `api1` max observed `17.20 MiB / 151 MiB`
+  - `api2` max observed `16.68 MiB / 151 MiB`
+  - `lb` max observed `5.68 MiB / 48 MiB`
 - direct implication:
   - parser, vectorizer, and write path are already cheap
   - rerank is no longer the dominant hotspot
@@ -123,8 +124,10 @@
 See:
 
 - `benchmarks/results/stack/2026-05-03-stack-summary.md`
+- `benchmarks/results/stack/2026-05-03-topology-frontier.md`
 - `benchmarks/results/stack/2026-05-03-512x64-frontier.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
+- `benchmarks/results/stack/2026-05-03-trace-frontier.md`
 - `benchmarks/results/stack/2026-05-03-last-transaction-partitioning.md`
 - `benchmarks/results/stack/2026-05-03-candidate-reservoir.md`
 - `benchmarks/results/stack/2026-05-03-rerank-half-lookup.md`
@@ -134,4 +137,4 @@ See:
 
 - The stack is compliant and self-contained, but it is still well above the `0.5 ms` target.
 - The present bottleneck is the search path under the real `900 req/s` full-stack run, not correctness parsing, response encoding, or memory pressure.
-- Best measured submission score is `5234.56`, and the latest validation rerun was `5233.41`; both are still short of the `6000` target.
+- Best measured submission score is `5309.78`; it is still short of the `6000` target.
