@@ -12,8 +12,14 @@ public static class ServiceCollectionExtensions {
 		ArgumentNullException.ThrowIfNull(configuration);
 		ArgumentException.ThrowIfNullOrWhiteSpace(contentRootPath);
 
-		RuntimeSettings settings = ReadRuntimeSettings(configuration);
-		RuntimeConfig runtimeConfig = RuntimeConfigFactory.Create(settings, contentRootPath);
+		RuntimeConfig runtimeConfig = LoadRuntimeConfig(configuration, contentRootPath);
+		return services.AddRuntimeServices(runtimeConfig);
+	}
+
+	public static IServiceCollection AddRuntimeServices(
+		this IServiceCollection services,
+		RuntimeConfig runtimeConfig) {
+		ArgumentNullException.ThrowIfNull(services);
 
 		services.AddSingleton(typeof(RuntimeConfig), runtimeConfig);
 		services.AddSingleton<FraudRuntimeState>();
@@ -22,6 +28,13 @@ public static class ServiceCollectionExtensions {
 		services.AddHostedService<StartupInitializationService>();
 
 		return services;
+	}
+
+	public static RuntimeConfig LoadRuntimeConfig(IConfiguration configuration, string contentRootPath) {
+		ArgumentNullException.ThrowIfNull(configuration);
+		ArgumentException.ThrowIfNullOrWhiteSpace(contentRootPath);
+		RuntimeSettings settings = ReadRuntimeSettings(configuration);
+		return RuntimeConfigFactory.Create(settings, contentRootPath);
 	}
 
 	private static RuntimeSettings ReadRuntimeSettings(IConfiguration configuration) {

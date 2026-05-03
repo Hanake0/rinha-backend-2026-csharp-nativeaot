@@ -2,17 +2,30 @@ using System.Text.Json;
 
 using Rinha2026.Api.Configuration;
 using Rinha2026.Api.Endpoints;
+using Rinha2026.Api.Raw;
 using Rinha2026.Api.Services;
 using Rinha2026.Core.Configuration;
 
 WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(args);
-SocketTransportConfiguration.Configure(builder.WebHost, builder.Configuration);
 builder.Logging.ClearProviders();
 builder.Logging.SetMinimumLevel(LogLevel.Warning);
-builder.Services.AddRuntimeServices(builder.Configuration, builder.Environment.ContentRootPath);
+RuntimeConfig runtimeConfig = ServiceCollectionExtensions.LoadRuntimeConfig(builder.Configuration, builder.Environment.ContentRootPath);
+
+if (runtimeConfig.Http.ServerMode == ServerMode.RawSockets) {
+	RequestProfileCollector rawRequestProfileCollector = new(runtimeConfig.Diagnostics);
+	await using RawHttpServer rawHttpServer = RawHttpServer.Create(
+		runtimeConfig,
+		builder.Configuration["ASPNETCORE_URLS"],
+		rawRequestProfileCollector);
+	await rawHttpServer.RunAsync();
+	return;
+}
+
+SocketTransportConfiguration.Configure(builder.WebHost, builder.Configuration);
+builder.Services.AddRuntimeServices(runtimeConfig);
 
 WebApplication app = builder.Build();
-RuntimeConfig runtimeConfig = app.Services.GetRequiredService<RuntimeConfig>();
+runtimeConfig = app.Services.GetRequiredService<RuntimeConfig>();
 SocketTransportConfiguration.ConfigureApplication(app.Lifetime, runtimeConfig.Http);
 
 app.MapGet(

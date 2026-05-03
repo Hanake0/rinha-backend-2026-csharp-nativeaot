@@ -54,7 +54,15 @@ public sealed class FraudDetectionService : IDisposable {
 	}
 
 	public bool TryHandle(ReadOnlySpan<byte> payload, out ReadOnlyMemory<byte> response) {
-		if (!this.TryHandleCore(payload, out response, out FraudDetectionProfile? _)) {
+		if (!this.TryHandleCore(payload, out int _, out response, out FraudDetectionProfile? _)) {
+			return false;
+		}
+
+		return true;
+	}
+
+	public bool TryHandle(ReadOnlySpan<byte> payload, out int fraudCount, out ReadOnlyMemory<byte> response) {
+		if (!this.TryHandleCore(payload, out fraudCount, out response, out FraudDetectionProfile? _)) {
 			return false;
 		}
 
@@ -65,7 +73,21 @@ public sealed class FraudDetectionService : IDisposable {
 		ReadOnlySpan<byte> payload,
 		out ReadOnlyMemory<byte> response,
 		out FraudDetectionProfile detectionProfile) {
-		if (!this.TryHandleCore(payload, out response, out FraudDetectionProfile? profile) || (profile is null)) {
+		if (!this.TryHandleCore(payload, out int _, out response, out FraudDetectionProfile? profile) || (profile is null)) {
+			detectionProfile = default;
+			return false;
+		}
+
+		detectionProfile = profile.Value;
+		return true;
+	}
+
+	public bool TryHandle(
+		ReadOnlySpan<byte> payload,
+		out int fraudCount,
+		out ReadOnlyMemory<byte> response,
+		out FraudDetectionProfile detectionProfile) {
+		if (!this.TryHandleCore(payload, out fraudCount, out response, out FraudDetectionProfile? profile) || (profile is null)) {
 			detectionProfile = default;
 			return false;
 		}
@@ -76,8 +98,10 @@ public sealed class FraudDetectionService : IDisposable {
 
 	private bool TryHandleCore(
 		ReadOnlySpan<byte> payload,
+		out int fraudCount,
 		out ReadOnlyMemory<byte> response,
 		out FraudDetectionProfile? detectionProfile) {
+		fraudCount = 0;
 		response = default;
 		detectionProfile = default;
 		long parseStart = Stopwatch.GetTimestamp();
@@ -95,7 +119,7 @@ public sealed class FraudDetectionService : IDisposable {
 		int topK = this.runtimeConfig.Detection.TopK;
 		SearchHit[] hitsBuffer = GetHitScratchBuffer(topK);
 		Span<SearchHit> hits = hitsBuffer.AsSpan(0, topK);
-		int fraudCount = this.searchRuntime.CountFraud(vector, hits);
+		fraudCount = this.searchRuntime.CountFraud(vector, hits);
 		response = this.responseCache.GetResponse(fraudCount);
 		long end = Stopwatch.GetTimestamp();
 		detectionProfile = new FraudDetectionProfile(
