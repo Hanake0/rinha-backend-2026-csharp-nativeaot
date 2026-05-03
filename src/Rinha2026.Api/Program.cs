@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Rinha2026.Api.Configuration;
 using Rinha2026.Api.Endpoints;
 using Rinha2026.Api.Services;
@@ -20,11 +22,18 @@ app.MapPost("/fraud-score", FraudScoreEndpoint.HandleAsync);
 RequestProfileCollector requestProfileCollector = app.Services.GetRequiredService<RequestProfileCollector>();
 
 if (requestProfileCollector.IsEnabled) {
-	app.MapGet(
-		"/debug/profile",
-		static (RequestProfileCollector collector) => Results.Json(
-			collector.Snapshot(),
-			Rinha2026.Api.ApiJsonContext.Default.RequestProfileSnapshot));
+	app.MapGet("/debug/profile", static async (
+		HttpContext context,
+		RequestProfileCollector collector,
+		CancellationToken cancellationToken) => {
+			context.Response.StatusCode = StatusCodes.Status200OK;
+			context.Response.ContentType = "application/json";
+			await JsonSerializer.SerializeAsync(
+				context.Response.Body,
+				collector.Snapshot(),
+				Rinha2026.Api.ApiJsonContext.Default.RequestProfileSnapshot,
+				cancellationToken);
+		});
 	app.MapPost("/debug/profile/reset", static (RequestProfileCollector collector) => {
 		collector.Reset();
 		return Results.Ok();
