@@ -32,10 +32,10 @@
 - current measured blocker:
   - search dominates the service-side tail under the real `900 req/s` constrained stack
 - next candidate branch:
-  - reduce exact rerank distance cost before reopening transport or load balancer experiments
+  - systematic artifact and beam/rerank sweep to improve the recall/latency frontier
 - latest completed experiment:
-  - unsorted fixed-capacity candidate reservoir during IVF posting scans
-  - result: preserved detection score and improved evaluator and stack latency; promoted as the current default search kernel
+  - lookup-table exact rerank on the f16 path with a fixed `16`-lane fast path
+  - result: strong microbenchmark win, negligible memory cost, modest service-side improvement, but no material full-stack score movement
 
 ## Current default submission shape
 
@@ -75,13 +75,13 @@
   - `FP = 5`
   - `FN = 10`
   - detection score `2533.11`
-  - search latency after candidate reservoir:
-    - `p50 = 128.7 us`
-    - `p95 = 763.2 us`
-    - `p99 = 885.6 us`
-    - `mean = 298.1 us`
+  - search latency after rerank lookup:
+    - `p50 = 131.9 us`
+    - `p95 = 764.4 us`
+    - `p99 = 981.8 us`
+    - `mean = 297.5 us`
 - full compliant stack, current default compose:
-  - latest validated run: `p99 = 2.31 ms`, final score `5169.92`
+  - latest validated run: `p99 = 2.31 ms`, final score `5169.15`
   - best observed run: `p99 = 2.30 ms`, final score `5172.24`
 
 ## Latest profiling anchors
@@ -89,25 +89,26 @@
 - profiling command:
   - `powershell -ExecutionPolicy Bypass -File scripts\profile-compose.ps1 -BeamLevel1 10 -BeamLevel2 32 -RerankCount 48 -TopK 5 -ApprovalThreshold 0.6 -HttpParserMode Manual -HttpIoQueueCount 0 -HttpInlineScheduling true -HttpNoDelay true -LbCpus 0.20 -ApiCpus 0.40 -LbMemLimit 48m -ApiMemLimit 151m`
 - API1 sampled profile:
-  - `bodyReadUs p50/p99 = 2.11 / 6.04`
-  - `parseUs p50/p99 = 2.49 / 4.71`
-  - `vectorizeUs p50/p99 = 0.41 / 1.40`
-  - `searchUs p50/p99 = 360.26 / 1822.08`
-  - `responseWriteUs p50/p99 = 38.68 / 70.58`
-  - `totalUs p50/p99 = 408.63 / 1865.04`
+  - `bodyReadUs p50/p99 = 1.83 / 15.35`
+  - `parseUs p50/p99 = 2.38 / 3.60`
+  - `vectorizeUs p50/p99 = 0.36 / 1.22`
+  - `searchUs p50/p99 = 345.77 / 1804.09`
+  - `responseWriteUs p50/p99 = 36.66 / 55.34`
+  - `totalUs p50/p99 = 397.20 / 1833.73`
 - API2 sampled profile:
-  - `bodyReadUs p50/p99 = 2.20 / 16.03`
-  - `parseUs p50/p99 = 2.63 / 5.38`
-  - `vectorizeUs p50/p99 = 0.41 / 1.67`
-  - `searchUs p50/p99 = 237.46 / 1869.75`
-  - `responseWriteUs p50/p99 = 38.19 / 67.69`
-  - `totalUs p50/p99 = 281.06 / 1925.38`
+  - `bodyReadUs p50/p99 = 1.78 / 3.57`
+  - `parseUs p50/p99 = 2.36 / 4.23`
+  - `vectorizeUs p50/p99 = 0.36 / 1.25`
+  - `searchUs p50/p99 = 232.41 / 1823.24`
+  - `responseWriteUs p50/p99 = 36.66 / 59.90`
+  - `totalUs p50/p99 = 273.34 / 1864.78`
 - memory under load:
-  - APIs stabilized around `16.4-16.5 MiB / 151 MiB`
-  - LB stabilized around `9.3 MiB / 48 MiB`
+  - APIs stayed in the mid-teen MiB range under load
+  - LB stayed around `4-5 MiB / 48 MiB`
 - direct implication:
   - parser, vectorizer, and write path are already cheap
-  - the next real win has to come from search-path selectivity and kernel efficiency
+  - rerank is no longer the obvious hotspot
+  - the next real win has to come from search-path selectivity and scan-count reduction
   - historical one-off on a nearby config: `p99 = 2.25 ms`, final score `5176.54` with `8/32/64`
 
 See:
@@ -116,6 +117,7 @@ See:
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `benchmarks/results/stack/2026-05-03-last-transaction-partitioning.md`
 - `benchmarks/results/stack/2026-05-03-candidate-reservoir.md`
+- `benchmarks/results/stack/2026-05-03-rerank-half-lookup.md`
 - `artifacts/compose-k6/k6-workdir/test/results.json`
 
 ## Current caveats
