@@ -12,12 +12,7 @@ public static class ServiceCollectionExtensions {
 		ArgumentNullException.ThrowIfNull(configuration);
 		ArgumentException.ThrowIfNullOrWhiteSpace(contentRootPath);
 
-		RuntimeSettings settings =
-			configuration
-				.GetSection(RuntimeSettings.SectionName)
-				.Get<RuntimeSettings>()
-			?? new RuntimeSettings();
-
+		RuntimeSettings settings = ReadRuntimeSettings(configuration);
 		RuntimeConfig runtimeConfig = RuntimeConfigFactory.Create(settings, contentRootPath);
 
 		services.AddSingleton(typeof(RuntimeConfig), runtimeConfig);
@@ -26,5 +21,106 @@ public static class ServiceCollectionExtensions {
 		services.AddHostedService<StartupInitializationService>();
 
 		return services;
+	}
+
+	private static RuntimeSettings ReadRuntimeSettings(IConfiguration configuration) {
+		RuntimeSettings defaults = new();
+
+		return new RuntimeSettings {
+			Detection = new DetectionSettings {
+				ApprovalThreshold = GetDouble(
+					configuration,
+					"Runtime:Detection:ApprovalThreshold",
+					defaults.Detection.ApprovalThreshold),
+				TopK = GetInt32(
+					configuration,
+					"Runtime:Detection:TopK",
+					defaults.Detection.TopK),
+			},
+			Dataset = new DatasetSettings {
+				IndexDirectory = GetString(
+					configuration,
+					"Runtime:Dataset:IndexDirectory",
+					defaults.Dataset.IndexDirectory),
+				MccRiskPath = GetString(
+					configuration,
+					"Runtime:Dataset:MccRiskPath",
+					defaults.Dataset.MccRiskPath),
+				NormalizationPath = GetString(
+					configuration,
+					"Runtime:Dataset:NormalizationPath",
+					defaults.Dataset.NormalizationPath),
+			},
+			Http = new HttpSettings {
+				ParserMode = GetEnum(
+					configuration,
+					"Runtime:Http:ParserMode",
+					defaults.Http.ParserMode),
+				ResponseMode = GetEnum(
+					configuration,
+					"Runtime:Http:ResponseMode",
+					defaults.Http.ResponseMode),
+				TransportMode = GetEnum(
+					configuration,
+					"Runtime:Http:TransportMode",
+					defaults.Http.TransportMode),
+			},
+			Search = new SearchSettings {
+				BeamLevel1 = GetInt32(
+					configuration,
+					"Runtime:Search:BeamLevel1",
+					defaults.Search.BeamLevel1),
+				BeamLevel2 = GetInt32(
+					configuration,
+					"Runtime:Search:BeamLevel2",
+					defaults.Search.BeamLevel2),
+				Dimension = GetInt32(
+					configuration,
+					"Runtime:Search:Dimension",
+					defaults.Search.Dimension),
+				DistanceMetric = GetEnum(
+					configuration,
+					"Runtime:Search:DistanceMetric",
+					defaults.Search.DistanceMetric),
+				IndexKind = GetEnum(
+					configuration,
+					"Runtime:Search:IndexKind",
+					defaults.Search.IndexKind),
+				PaddedDimension = GetInt32(
+					configuration,
+					"Runtime:Search:PaddedDimension",
+					defaults.Search.PaddedDimension),
+				RerankCount = GetInt32(
+					configuration,
+					"Runtime:Search:RerankCount",
+					defaults.Search.RerankCount),
+			},
+		};
+	}
+
+	private static double GetDouble(IConfiguration configuration, string key, double fallback) {
+		string? value = configuration[key];
+		return double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsedValue)
+			? parsedValue
+			: fallback;
+	}
+
+	private static TEnum GetEnum<TEnum>(IConfiguration configuration, string key, TEnum fallback) where TEnum : struct {
+		string? value = configuration[key];
+		return Enum.TryParse<TEnum>(value, ignoreCase: true, out TEnum parsedValue)
+			? parsedValue
+			: fallback;
+	}
+
+	private static int GetInt32(IConfiguration configuration, string key, int fallback) {
+		string? value = configuration[key];
+		return int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int parsedValue)
+			? parsedValue
+			: fallback;
+	}
+
+	private static string GetString(IConfiguration configuration, string key, string fallback) {
+		string? value = configuration[key];
+		return string.IsNullOrWhiteSpace(value) ? fallback : value;
 	}
 }

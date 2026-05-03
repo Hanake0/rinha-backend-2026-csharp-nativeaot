@@ -3,6 +3,9 @@ using Rinha2026.Api.Endpoints;
 using Rinha2026.Api.Services;
 
 WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(args);
+SocketTransportConfiguration.Configure(builder.WebHost, builder.Configuration);
+builder.Logging.ClearProviders();
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
 builder.Services.AddRuntimeServices(builder.Configuration, builder.Environment.ContentRootPath);
 
 WebApplication app = builder.Build();
