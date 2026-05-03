@@ -26,21 +26,23 @@
 
 ## Current exploration stage
 
-- stage: `search-path optimization`
+- stage: `search-path optimization and runtime memory shaping`
 - active objectives:
   - `FP = 0`
   - `FN = 0`
   - full-stack `p99 < 1.0 ms`, stretch `p99 < 0.5 ms`
 - current accepted baseline:
-  - corrected stable artifact family is now exact at `0/0`
-  - constrained stack is reproducibly in the `1.35-1.38 ms` range
-- latest rejected branch:
+  - corrected stable artifact family is exact at `0 / 0`
+  - constrained stack is reproducibly in the `1.35-1.41 ms` range
+- latest rejected branches:
   - AVX-specific f32 rerank distance path
-  - micro-benchmarks improved, but constrained compose regressed to `1.47 ms`
+  - adaptive boundary rerank fallback promoted from `32 -> 48`
+  - unix-domain-socket transport stack
 - next candidate branch:
-  - exact-safe q8 scan pruning and thresholded early-exit
-  - candidate-selection cost reduction before rerank
-  - only then deeper transport/runtime surgery if search-side wins stall
+  - promote hot read-mostly index structures into process memory
+  - add explicit startup page warming for the large mapped vector files
+  - benchmark whether a custom load balancer can beat nginx under the same envelope
+  - only then escalate to deeper exact-search rewrites
 
 ## Current validated candidate shape
 
@@ -60,14 +62,13 @@
   - `beamLevel1 = 8`
   - `beamLevel2 = 128`
   - `rerankCount = 48`
+  - `boundaryRerankCount = 48`
   - `topK = 5`
   - `approvalThreshold = 0.6`
   - `useLeafRadiusPruning = true`
   - `useLastTransactionPartitionPruning = false` for the current stack baseline
 - transport/runtime tuning:
-  - `Runtime:Http:IoQueueCount = 0`
   - `Runtime:Http:UnsafePreferInlineScheduling = true`
-  - `Runtime:Http:NoDelay = true`
   - `DOTNET_PROCESSOR_COUNT = 1`
   - `DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS = 1`
   - `DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT = 1`
@@ -109,25 +110,38 @@
 - rejected AVX branch:
   - evaluator stayed exact
   - compose degraded to `1.47 ms`, final `5832.55`
+- adaptive boundary rerank branch:
+  - evaluator recovered exactness with `rerankCount = 32`, `boundaryRerankCount = 48`
+  - compose regressed to `p99 = 1.41 ms`, final `5850.77`
+  - kept as an experiment, not promoted
+- short transport knob check:
+  - forcing `Runtime:Http:IoQueueCount = 0` was slightly worse than the short exact baseline
+  - not promoted
 
 ## Latest profiling anchors
 
 - corrected stable path, representative service-side profile:
-  - API1 total `p99 ~ 713.9 us`
-  - API2 total `p99 ~ 758.9 us`
+  - API1 total `p99 ~ 787.3 us`
+  - API2 total `p99 ~ 925.4 us`
   - search remains the dominant in-service stage
+- direct-vs-lb anchor:
+  - earlier direct dual-target replay landed around `1.28 ms`
+  - current nginx stack lands around `1.36 ms`
+  - the present LB-visible overhead is on the order of `~0.08 ms`
 - memory under constrained load:
   - `api1` max observed `~17.2 MiB / 151 MiB`
-  - `api2` max observed `~17.3 MiB / 151 MiB`
-  - `lb` max observed `~3.7-6.7 MiB / 48 MiB`
+  - `api2` max observed `~17.2 MiB / 151 MiB`
+  - `lb` max observed `~4.9 MiB / 48 MiB`
 - implication:
   - memory pressure is still not the limiter
-  - parser/vectorizer are already cheap
+  - the index is already loaded through shared read-only memory maps, not per-request disk reads
   - the remaining gap is dominated by search tail plus stack-visible transport/runtime overhead
+  - the next memory experiment is selective hot-structure promotion, not copying the whole corpus into both APIs
 
 ## Evidence
 
 - `benchmarks/results/stack/2026-05-03-round4-stable-summary.md`
+- `benchmarks/results/stack/2026-05-03-adaptive-transport-memory-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-noavx.json`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-partition-on.json`
