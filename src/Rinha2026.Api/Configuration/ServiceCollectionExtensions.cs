@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions {
 		RuntimeConfig runtimeConfig = RuntimeConfigFactory.Create(settings, contentRootPath);
 
 		services.AddSingleton(typeof(RuntimeConfig), runtimeConfig);
+		services.AddSingleton<FraudRuntimeState>();
 		services.AddSingleton<StartupState>();
 		services.AddHostedService<StartupInitializationService>();
 
