@@ -13,43 +13,49 @@
 - [x] 1 LB + 2 API compose stack
 - [x] Constrained compose benchmark harness
 - [x] Real-stack request-stage and memory profiling harness
-- [x] Final stack validation and submission packaging
+- [x] Stable full-precision rerank artifact support
+- [x] Official generator-compatible round4 vectorization
+- [x] Constrained transport comparison harness
 
 ## Latest validated commits
 
-- `f4e9de4` `⚙️ perf(index): promote 256x128 topology frontier`
-- `6379af1` `🐛 fix(api): use source-generated profile serialization for nativeaot`
-- `9d16d52` `✨ feat(tooling): export traced evaluator sweep metrics`
-- `f65576d` `⚡ perf(search): accelerate f16 rerank distance`
+- `189b706` `🧪 feat(tooling): add constrained transport comparison harness`
+- `29ac822` `🐛 fix(vectorization): match official round4 semantics`
+- `dc3fbca` `📦 feat(index): add stable full-precision rerank support`
+- `16360b3` `🧱 chore(docker): trim api build context`
 
 ## Current exploration stage
 
 - stage: `search-path optimization`
-- active objective:
+- active objectives:
   - `FP = 0`
   - `FN = 0`
   - full-stack `p99 < 1.0 ms`, stretch `p99 < 0.5 ms`
-- current measured blocker:
-  - service-side tail is down to roughly `0.64-0.68 ms`
-  - the remaining stack gap is split between search selectivity and LB/network-visible overhead
+- current accepted baseline:
+  - corrected stable artifact family is now exact at `0/0`
+  - constrained stack is reproducibly in the `1.35-1.38 ms` range
+- latest rejected branch:
+  - AVX-specific f32 rerank distance path
+  - micro-benchmarks improved, but constrained compose regressed to `1.47 ms`
 - next candidate branch:
-  - LB/runtime overhead reduction
-  - metric/index experiments that close the remaining `1 FP / 2 FN`
-  - alternate ANN structures only if they can beat the new pruning baseline under constrained compose
-- latest completed experiment:
-  - optional q8 leaf-radius pruning on top of the promoted `256x128` topology, followed by evaluator and constrained compose frontier sweeps
-  - result: new measured best full-stack score on `8/128/48` with materially lower stack p99 and better recall
+  - exact-safe q8 scan pruning and thresholded early-exit
+  - candidate-selection cost reduction before rerank
+  - only then deeper transport/runtime surgery if search-side wins stall
 
-## Current default submission shape
+## Current validated candidate shape
 
 - load balancer: `nginx:1.27-alpine`
 - API runtime: `.NET 10 NativeAOT`
-- dataset artifact: `runtime-data/`
-- runtime-data provenance:
-  - promoted source build directory: `runtime-data-256x128-radii-s524k`
+- validated runtime-data directory:
+  - `runtime-data-256x128-radii-f32-stable-s524k`
+- artifact properties:
   - topology: `L1 = 256`, `L2 per L1 = 128`
   - training sample size: `524,288`
   - k-means iterations: `12`
+  - rerank corpus:
+    - `vectors.f16.bin`
+    - `vectors.f32.bin`
+    - `vectors.original.ids.bin`
 - search runtime:
   - `beamLevel1 = 8`
   - `beamLevel2 = 128`
@@ -57,11 +63,14 @@
   - `topK = 5`
   - `approvalThreshold = 0.6`
   - `useLeafRadiusPruning = true`
-  - `useLastTransactionPartitionPruning = true`
-- transport tuning:
+  - `useLastTransactionPartitionPruning = false` for the current stack baseline
+- transport/runtime tuning:
   - `Runtime:Http:IoQueueCount = 0`
   - `Runtime:Http:UnsafePreferInlineScheduling = true`
   - `Runtime:Http:NoDelay = true`
+  - `DOTNET_PROCESSOR_COUNT = 1`
+  - `DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS = 1`
+  - `DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT = 1`
 - constrained resource split:
   - `lb = 0.15 CPU / 48 MB`
   - `api1 = 0.425 CPU / 151 MB`
@@ -69,75 +78,64 @@
 
 ## Latest benchmark anchors
 
-- reference parser: `~569-656 ns`
-- vectorizer: `~19.5-20.4 ns`
-- q8 encode: `~15.7 ns`
-- f16 encode: `~27.8 ns`
-- exact flat search, 4,096 vectors: `~84.0 us`
-- approximate hierarchical search, 4,096 vectors: `~3.19 us`
-- end-to-end detection pipeline, exact: `~96.2 us`
-- end-to-end detection pipeline, approximate: `~3.57 us`
-- full-corpus evaluator, current default artifact:
-  - `FP = 1`
-  - `FN = 2`
-  - detection score `2729.07`
-  - search latency after rerank lookup:
-    - latest validated `ServiceManual`: `p50 = 104.0 us`, `p95 = 214.1 us`, `p99 = 505.1 us`, `mean = 117.0 us`
-    - best observed `ManualParser` frontier: `p50 = 104.1 us`, `p95 = 210.2 us`, `p99 = 390.8 us`, `mean = 114.4 us`
-- full compliant stack, current default compose:
-  - latest validated run: `p99 = 1.13 ms`, final score `5675.38`
-  - best observed run: `p99 = 1.10 ms`, final score `5688.47`
-  - detection result: `FP = 1`, `FN = 2`, `http_errors = 0`
-- best evaluator-side detection candidate on the current artifact family:
-  - config: `beamLevel1 = 8`, `beamLevel2 = 128`, `rerankCount = 48`
-  - `FP = 1`
-  - `FN = 2`
-  - detection score `2729.07`
-  - best observed evaluator search latency `p99 = 390.8 us`
-  - latest validated service-path evaluator search latency `p99 = 505.1 us`
-  - best observed compose result: `p99 = 1.10 ms`, final score `5688.47`
-  - promoted because it improved both correctness and stack p99 on the constrained run
+- full-corpus evaluator, corrected stable artifact:
+  - config: `8 / 128 / 48`, `leafRadius = true`, `lastTxPartition = false`
+  - `FP = 0`
+  - `FN = 0`
+  - detection score `3000`
+  - search latency:
+    - `p50 = 104.4 us`
+    - `p95 = 211.4 us`
+    - `p99 = 510.6 us`
+    - `mean = 117.4 us`
+- full-corpus evaluator, partition-pruning experiment:
+  - config: `8 / 128 / 48`, `leafRadius = true`, `lastTxPartition = true`
+  - `FP = 0`
+  - `FN = 0`
+  - search `p99 = 524.5 us`
+  - kept as exact but not promoted
+- full compliant stack, corrected stable baseline:
+  - command family: `benchmark-official-compose.ps1`
+  - runtime-data: `runtime-data-256x128-radii-f32-stable-s524k`
+  - `p99 = 1.38 ms`
+  - `FP = 0`
+  - `FN = 0`
+  - `http_errors = 0`
+  - final score `5860.13`
+- best observed stack on the corrected stable family:
+  - `p99 = 1.35 ms`
+  - detection `0 / 0`
+  - final score `5869.95`
+- rejected AVX branch:
+  - evaluator stayed exact
+  - compose degraded to `1.47 ms`, final `5832.55`
 
 ## Latest profiling anchors
 
-- profiling command:
-  - `powershell -ExecutionPolicy Bypass -File scripts\profile-compose.ps1 -RuntimeDataDir runtime-data-256x128-radii-s524k -BeamLevel1 8 -BeamLevel2 96 -RerankCount 48 -TopK 5 -ApprovalThreshold 0.6 -UseLeafRadiusPruning:$true -HttpParserMode Manual -HttpIoQueueCount 0 -HttpInlineScheduling true -HttpNoDelay true -LbCpus 0.15 -ApiCpus 0.425 -LbMemLimit 48m -ApiMemLimit 151m -UseLastTransactionPartitionPruning:$true`
-- API1 sampled profile:
-  - `bodyReadUs p50/p99 = 1.79 / 7.28`
-  - `parseUs p50/p99 = 2.29 / 5.12`
-  - `vectorizeUs p50/p99 = 0.36 / 1.34`
-  - `searchUs p50/p99 = 182.30 / 621.20`
-  - `responseWriteUs p50/p99 = 36.16 / 52.78`
-  - `totalUs p50/p99 = 225.71 / 679.13`
-- API2 sampled profile:
-  - `bodyReadUs p50/p99 = 1.78 / 6.27`
-  - `parseUs p50/p99 = 2.31 / 4.95`
-  - `vectorizeUs p50/p99 = 0.37 / 1.42`
-  - `searchUs p50/p99 = 190.18 / 601.50`
-  - `responseWriteUs p50/p99 = 36.07 / 61.63`
-  - `totalUs p50/p99 = 235.02 / 641.54`
-- memory under load:
-  - `api1` max observed `17.20 MiB / 151 MiB`
-  - `api2` max observed `16.68 MiB / 151 MiB`
-  - `lb` max observed `5.68 MiB / 48 MiB`
-- direct implication:
-  - parser, vectorizer, and write path are already cheap
-  - search still dominates the service-side tail
-  - memory pressure is not the current limiter
-  - external LB/network-visible overhead is now material enough to benchmark directly
+- corrected stable path, representative service-side profile:
+  - API1 total `p99 ~ 713.9 us`
+  - API2 total `p99 ~ 758.9 us`
+  - search remains the dominant in-service stage
+- memory under constrained load:
+  - `api1` max observed `~17.2 MiB / 151 MiB`
+  - `api2` max observed `~17.3 MiB / 151 MiB`
+  - `lb` max observed `~3.7-6.7 MiB / 48 MiB`
+- implication:
+  - memory pressure is still not the limiter
+  - parser/vectorizer are already cheap
+  - the remaining gap is dominated by search tail plus stack-visible transport/runtime overhead
 
 ## Evidence
 
-- `benchmarks/results/stack/2026-05-03-stack-summary.md`
-- `benchmarks/results/stack/2026-05-03-leaf-radius-pruning.md`
+- `benchmarks/results/stack/2026-05-03-round4-stable-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
-- `artifacts/evaluator-sweeps/leaf-radius-frontier.csv`
-- `artifacts/evaluator-sweeps/leaf-radius-rerank-frontier.csv`
-- `artifacts/evaluator-sweeps/leaf-radius-wide-frontier.csv`
-- `artifacts/compose-k6/k6-workdir/test/results.json`
+- `artifacts/evaluator-round4-hierarchical-f32-stable-noavx.json`
+- `artifacts/evaluator-round4-hierarchical-f32-stable-partition-on.json`
+- `artifacts/compose-k6-round4-f32-inline-runtime1-noavx/k6-workdir/test/results.json`
+- `artifacts/compose-k6-round4-f32-inline-runtime1-avx-rerun/k6-workdir/test/results.json`
 
 ## Current caveats
 
-- The stack is compliant and self-contained, but it is still above the `0.5 ms` target.
-- The present bottleneck is no longer parsing or memory pressure. It is search selectivity plus stack-visible transport overhead.
-- Best measured submission score is `5688.47`; it is still short of the `6000` target.
+- The stack is now exact on the official evaluator path, but it is still above the `0.5 ms` target.
+- The accepted baseline is short of the `6000` target by roughly `140` points on the latest reproduced run.
+- The fastest rejected branch so far was not the transport layer; it was a measurement trap from a micro-benchmark-only win.
