@@ -47,6 +47,7 @@ public sealed class ReferenceCorpusBuilderTests {
 			Assert.Equal("HierarchicalBeamIvf", manifest.IndexKind);
 			Assert.Equal(2, manifest.Level1ClusterCount);
 			Assert.Equal(2, manifest.Level2ClustersPerLevel1);
+			Assert.Equal("IdentityLeafOrder", manifest.PostingLayout);
 			Assert.Equal(32, new FileInfo(q8Path).Length);
 			Assert.Equal(64, new FileInfo(f16Path).Length);
 			Assert.Equal(1, new FileInfo(labelPath).Length);
@@ -55,8 +56,9 @@ public sealed class ReferenceCorpusBuilderTests {
 			Assert.Equal(20, new FileInfo(postingOffsetsPath).Length);
 			Assert.Equal(8, new FileInfo(postingIdsPath).Length);
 
-			byte[] labels = await File.ReadAllBytesAsync(labelPath);
-			Assert.Equal(0b0000_0010, labels[0]);
+			using FlatArtifactSet artifactSet = FlatArtifactSet.Load(outputDirectory);
+			Assert.False(artifactSet.IsFraud(0));
+			Assert.True(artifactSet.IsFraud(1));
 
 			IndexManifest? reloadedManifest = JsonSerializer.Deserialize<IndexManifest>(
 				await File.ReadAllTextAsync(manifestPath),

@@ -5,6 +5,7 @@ obj/
 artifacts/
 BenchmarkDotNet.Artifacts/
 TestResults/
+runtime-data-*/
 *.user
 *.suo
 *.nupkg

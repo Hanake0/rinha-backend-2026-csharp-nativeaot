@@ -30,6 +30,11 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 
 	public int Level2ClustersPerLevel1 => this.FlatArtifacts.Manifest.Level2ClustersPerLevel1;
 
+	public bool UsesIdentityPostings => string.Equals(
+		this.FlatArtifacts.Manifest.PostingLayout,
+		"IdentityLeafOrder",
+		StringComparison.Ordinal);
+
 	public static HierarchicalArtifactSet Load(string indexDirectory) {
 		FlatArtifactSet flatArtifacts = FlatArtifactSet.Load(indexDirectory);
 		IndexManifest manifest = flatArtifacts.Manifest;

@@ -50,7 +50,9 @@ internal static class HierarchicalIndexBuilder {
 			level2ClustersPerLevel1);
 
 		int[] postingOffsets = BuildPostingOffsets(leafCounts);
-		int[] postingIds = BuildPostingIds(assignments, postingOffsets);
+		int[] orderedOriginalIds = BuildPostingIds(assignments, postingOffsets);
+		RewriteFlatArtifactsInLeafOrder(options.OutputDirectory, baseManifest, quantizedVectors, orderedOriginalIds);
+		int[] postingIds = BuildIdentityPostingIds(vectorCount);
 
 		await WriteFloatArrayAsync(
 			Path.Combine(options.OutputDirectory, baseManifest.Level1CentroidFile),
@@ -82,6 +84,7 @@ internal static class HierarchicalIndexBuilder {
 			Level1ClusterCount = level1ClusterCount,
 			Level2ClustersPerLevel1 = level2ClustersPerLevel1,
 			PaddedDimension = baseManifest.PaddedDimension,
+			PostingLayout = "IdentityLeafOrder",
 			QuantizationMaxValue = baseManifest.QuantizationMaxValue,
 			QuantizationMinValue = baseManifest.QuantizationMinValue,
 			QuantizationKind = baseManifest.QuantizationKind,
@@ -91,6 +94,16 @@ internal static class HierarchicalIndexBuilder {
 			TrainingSampleSize = trainingSampleSize,
 			VectorCount = baseManifest.VectorCount,
 		};
+	}
+
+	private static int[] BuildIdentityPostingIds(int vectorCount) {
+		int[] postingIds = new int[vectorCount];
+
+		for (int index = 0; index < postingIds.Length; index++) {
+			postingIds[index] = index;
+		}
+
+		return postingIds;
 	}
 
 	private static int[] BuildPostingIds(ReadOnlySpan<int> assignments, ReadOnlySpan<int> postingOffsets) {
@@ -231,4 +244,66 @@ internal static class HierarchicalIndexBuilder {
 		byte[] payload = MemoryMarshal.AsBytes(values.AsSpan()).ToArray();
 		await File.WriteAllBytesAsync(path, payload, cancellationToken);
 	}
+
+	private static void RewriteFlatArtifactsInLeafOrder(
+		string outputDirectory,
+		IndexManifest manifest,
+		MemoryMappedReadOnlyBuffer quantizedVectors,
+		ReadOnlySpan<int> orderedOriginalIds) {
+		string q8Path = Path.Combine(outputDirectory, manifest.QuantizedVectorFile);
+		string f16Path = Path.Combine(outputDirectory, manifest.RerankVectorFile);
+		string labelPath = Path.Combine(outputDirectory, manifest.LabelBitsetFile);
+		string q8TempPath = q8Path + ".reordered";
+		string f16TempPath = f16Path + ".reordered";
+		string labelTempPath = labelPath + ".reordered";
+		int q8Width = manifest.PaddedDimension;
+		int f16Width = checked(manifest.PaddedDimension * sizeof(ushort));
+
+		using (MemoryMappedReadOnlyBuffer rerankVectors = MemoryMappedReadOnlyBuffer.OpenRead(f16Path))
+		using (MemoryMappedReadOnlyBuffer labels = MemoryMappedReadOnlyBuffer.OpenRead(labelPath))
+		using (FileStream q8Stream = CreateOutputStream(q8TempPath))
+		using (FileStream f16Stream = CreateOutputStream(f16TempPath)) {
+			ReadOnlySpan<byte> quantizedSpan = quantizedVectors.GetSpan();
+			ReadOnlySpan<byte> rerankSpan = rerankVectors.GetSpan();
+			ReadOnlySpan<byte> labelSpan = labels.GetSpan();
+			byte[] reorderedLabels = new byte[(orderedOriginalIds.Length + 7) / 8];
+
+			for (int destinationIndex = 0; destinationIndex < orderedOriginalIds.Length; destinationIndex++) {
+				int sourceIndex = orderedOriginalIds[destinationIndex];
+				q8Stream.Write(quantizedSpan.Slice(sourceIndex * q8Width, q8Width));
+				f16Stream.Write(rerankSpan.Slice(sourceIndex * f16Width, f16Width));
+
+				if (IsFraud(labelSpan, sourceIndex)) {
+					reorderedLabels[destinationIndex >> 3] |= (byte)(1 << (destinationIndex & 0b111));
+				}
+			}
+
+			File.WriteAllBytes(labelTempPath, reorderedLabels);
+		}
+
+		quantizedVectors.Dispose();
+		File.Delete(q8Path);
+		File.Delete(f16Path);
+		File.Delete(labelPath);
+		File.Move(q8TempPath, q8Path);
+		File.Move(f16TempPath, f16Path);
+		File.Move(labelTempPath, labelPath);
+	}
+
+	private static FileStream CreateOutputStream(string path) => new(
+		path,
+		FileMode.Create,
+		FileAccess.Write,
+		FileShare.None,
+		bufferSize: 64 * 1024,
+		FileOptions.SequentialScan);
+
+	private static bool IsFraud(ReadOnlySpan<byte> labels, int vectorIndex) {
+		int byteOffset = vectorIndex >> 3;
+		int bitOffset = vectorIndex & 0b111;
+		return (labels[byteOffset] & (1 << bitOffset)) != 0;
+	}
 }
+
+
+

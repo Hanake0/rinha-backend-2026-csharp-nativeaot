@@ -25,6 +25,8 @@ public sealed class IndexManifest {
 
 	public int PaddedDimension { get; init; }
 
+	public string PostingLayout { get; init; } = "ExplicitIds";
+
 	public float QuantizationMaxValue { get; init; } = 1f;
 
 	public float QuantizationMinValue { get; init; } = -1f;
