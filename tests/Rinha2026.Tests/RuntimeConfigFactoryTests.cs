@@ -19,8 +19,9 @@ public sealed class RuntimeConfigFactoryTests {
 		Assert.Equal(Path.Combine(contentRootPath, "data", "index"), runtimeConfig.Dataset.IndexDirectory);
 		Assert.Equal(Path.Combine(contentRootPath, "data", "mcc_risk.json"), runtimeConfig.Dataset.MccRiskPath);
 		Assert.Equal(Path.Combine(contentRootPath, "data", "normalization.json"), runtimeConfig.Dataset.NormalizationPath);
-		Assert.Equal(6, runtimeConfig.Search.BeamLevel1);
-		Assert.Equal(12, runtimeConfig.Search.BeamLevel2);
+		Assert.Equal(10, runtimeConfig.Search.BeamLevel1);
+		Assert.Equal(32, runtimeConfig.Search.BeamLevel2);
+		Assert.Equal(48, runtimeConfig.Search.RerankCount);
 		Assert.Equal(6, runtimeConfig.Detection.ResponseCount);
 	}
 

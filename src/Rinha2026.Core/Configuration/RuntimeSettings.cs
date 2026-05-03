@@ -27,9 +27,9 @@ public sealed class DatasetSettings {
 }
 
 public sealed class SearchSettings {
-	public int BeamLevel1 { get; init; } = 6;
+	public int BeamLevel1 { get; init; } = 10;
 
-	public int BeamLevel2 { get; init; } = 12;
+	public int BeamLevel2 { get; init; } = 32;
 
 	public int Dimension { get; init; } = 14;
 
