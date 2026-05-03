@@ -61,6 +61,10 @@ public static class ServiceCollectionExtensions {
 					configuration,
 					"Runtime:Http:ResponseMode",
 					defaults.Http.ResponseMode),
+				ServerMode = GetEnum(
+					configuration,
+					"Runtime:Http:ServerMode",
+					defaults.Http.ServerMode),
 				TransportMode = GetEnum(
 					configuration,
 					"Runtime:Http:TransportMode",

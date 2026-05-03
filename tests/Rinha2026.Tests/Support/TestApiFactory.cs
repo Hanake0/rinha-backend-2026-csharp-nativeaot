@@ -32,6 +32,7 @@ internal static class TestApiFactory {
 			new RuntimeHttpConfig(
 				ParserMode: parserMode,
 				ResponseMode: ResponseMode.PrecomputedTable,
+				ServerMode: ServerMode.Kestrel,
 				TransportMode: TransportMode.Tcp,
 				UnixSocketPath: null));
 

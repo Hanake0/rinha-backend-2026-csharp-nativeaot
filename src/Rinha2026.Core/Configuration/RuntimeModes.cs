@@ -19,6 +19,11 @@ public enum ResponseMode {
 	PrecomputedTable = 0,
 }
 
+public enum ServerMode {
+	Kestrel = 0,
+	RawSockets = 1,
+}
+
 public enum TransportMode {
 	Tcp = 0,
 	UnixDomainSocket = 1,

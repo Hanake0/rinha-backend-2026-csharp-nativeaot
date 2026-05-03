@@ -27,6 +27,7 @@ public sealed class ServiceCollectionExtensionsTests {
 			["Runtime:Search:UseLastTransactionPartitionPruning"] = "false",
 			["Runtime:Http:ParserMode"] = "ReferenceStj",
 			["Runtime:Http:ResponseMode"] = "PrecomputedTable",
+			["Runtime:Http:ServerMode"] = "RawSockets",
 			["Runtime:Http:TransportMode"] = "UnixDomainSocket",
 			["Runtime:Http:UnixSocketPath"] = "./sockets/api1.sock",
 			["Runtime:Diagnostics:ProfileEnabled"] = "true",
@@ -53,6 +54,7 @@ public sealed class ServiceCollectionExtensionsTests {
 		Assert.True(runtimeConfig.Search.UseLeafRadiusPruning);
 		Assert.False(runtimeConfig.Search.UseLastTransactionPartitionPruning);
 		Assert.Equal(ParserMode.ReferenceStj, runtimeConfig.Http.ParserMode);
+		Assert.Equal(ServerMode.RawSockets, runtimeConfig.Http.ServerMode);
 		Assert.Equal(TransportMode.UnixDomainSocket, runtimeConfig.Http.TransportMode);
 		Assert.EndsWith("sockets" + Path.DirectorySeparatorChar + "api1.sock", runtimeConfig.Http.UnixSocketPath, StringComparison.Ordinal);
 		Assert.True(runtimeConfig.Diagnostics.ProfileEnabled);

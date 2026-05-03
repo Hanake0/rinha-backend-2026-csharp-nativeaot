@@ -28,6 +28,7 @@ public sealed class RuntimeConfigFactoryTests {
 		Assert.Equal(6, runtimeConfig.Detection.ResponseCount);
 		Assert.Equal(3, runtimeConfig.Detection.MinDeniedCount);
 		Assert.Equal(2, runtimeConfig.Detection.MaxApprovedCount);
+		Assert.Equal(ServerMode.Kestrel, runtimeConfig.Http.ServerMode);
 		Assert.Null(runtimeConfig.Http.UnixSocketPath);
 		Assert.False(runtimeConfig.Diagnostics.ProfileEnabled);
 		Assert.Equal(8192, runtimeConfig.Diagnostics.ProfileSampleCapacity);
@@ -118,6 +119,7 @@ public sealed class RuntimeConfigFactoryTests {
 		string contentRootPath = Path.Combine("C:\\", "work", "submission");
 		RuntimeSettings settings = new() {
 			Http = new HttpSettings {
+				ServerMode = ServerMode.RawSockets,
 				TransportMode = TransportMode.UnixDomainSocket,
 				UnixSocketPath = "./sockets/api1.sock",
 			},
@@ -125,6 +127,7 @@ public sealed class RuntimeConfigFactoryTests {
 
 		RuntimeConfig runtimeConfig = RuntimeConfigFactory.Create(settings, contentRootPath);
 
+		Assert.Equal(ServerMode.RawSockets, runtimeConfig.Http.ServerMode);
 		Assert.Equal(Path.Combine(contentRootPath, "sockets", "api1.sock"), runtimeConfig.Http.UnixSocketPath);
 	}
 }

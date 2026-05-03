@@ -32,6 +32,7 @@ RuntimeConfig runtimeConfig = new(
 	new RuntimeHttpConfig(
 		GetRuntimeParserMode(options.ParseMode),
 		ResponseMode.PrecomputedTable,
+		ServerMode.Kestrel,
 		TransportMode.Tcp,
 		UnixSocketPath: null));
 

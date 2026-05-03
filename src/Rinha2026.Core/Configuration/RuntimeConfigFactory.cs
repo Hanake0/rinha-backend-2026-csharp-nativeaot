@@ -35,6 +35,7 @@ public static class RuntimeConfigFactory {
 		RuntimeHttpConfig http = new(
 			settings.Http.ParserMode,
 			settings.Http.ResponseMode,
+			settings.Http.ServerMode,
 			settings.Http.TransportMode,
 			GetOptionalAbsolutePath(contentRootPath, settings.Http.UnixSocketPath));
 

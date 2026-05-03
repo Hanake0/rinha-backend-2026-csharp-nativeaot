@@ -55,6 +55,8 @@ public sealed class HttpSettings {
 
 	public ResponseMode ResponseMode { get; init; } = ResponseMode.PrecomputedTable;
 
+	public ServerMode ServerMode { get; init; } = ServerMode.Kestrel;
+
 	public TransportMode TransportMode { get; init; } = TransportMode.Tcp;
 
 	public string? UnixSocketPath { get; init; }

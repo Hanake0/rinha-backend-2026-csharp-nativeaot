@@ -47,6 +47,7 @@ public readonly record struct RuntimeSearchConfig(
 public readonly record struct RuntimeHttpConfig(
 	ParserMode ParserMode,
 	ResponseMode ResponseMode,
+	ServerMode ServerMode,
 	TransportMode TransportMode,
 	string? UnixSocketPath);
 
