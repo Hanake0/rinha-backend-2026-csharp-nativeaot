@@ -30,10 +30,11 @@
 - active objectives:
   - `FP = 0`
   - `FN = 0`
-  - full-stack `p99 < 1.0 ms`, stretch `p99 < 0.5 ms`
+  - sustain `6000` on the official benchmark path
+  - stretch `p99 < 0.5 ms`
 - current accepted baseline:
   - corrected stable artifact family is exact at `0 / 0`
-  - constrained stack is reproducibly in the `1.35-1.41 ms` range
+  - current scratch-default stack has now hit the full official `6000` score band
 - latest rejected branches:
   - AVX-specific f32 rerank distance path
   - adaptive boundary rerank fallback promoted from `32 -> 48`
@@ -44,6 +45,8 @@
   - native AOT tcp L4 load balancer
   - class-aware exact fraud-count search
   - raw socket HTTP API server
+  - API runtime-base swap to `noble-chiseled`
+  - helper-container pre-ready warm-up through `nginx`
 - next candidate branch:
   - algorithmic search-side cuts that preserve the exact `0 / 0` decision surface
   - distance and candidate-pruning experiments only if they can be validated against the official evaluator
@@ -53,7 +56,7 @@
 ## Current validated candidate shape
 
 - load balancer: `nginx:1.27-alpine`
-- API runtime: `.NET 10 NativeAOT`
+- API runtime: `.NET 10 NativeAOT` musl static on `scratch`
 - validated runtime-data directory:
   - `runtime-data-256x128-radii-f32-stable-s524k`
 - artifact properties:
@@ -118,6 +121,12 @@
   - `p99 = 1.43 ms`
   - detection `0 / 0`
   - final score `5845.68`
+- current promoted startup-warm stack:
+  - default `docker-compose.yml` now uses the musl static `scratch` API image path
+  - built-in startup warm-up faults in mmap-backed artifacts, runs real `TryHandle(...)` warm-up payloads, then warms the loopback HTTP `/fraud-score` path before `/ready`
+  - full official run landed at `p99 = 0.93 ms`, `FP = 0`, `FN = 0`, `http_errors = 0`, final `6000`
+  - later full official scratch reruns landed at `p99 = 0.96 ms` and `1.03 ms`; a matching noble control on the same current code landed at `1.04 ms`
+  - conclusion: both runtime families are near the `1.0 ms` cut line on this workstation, but scratch is now a valid promoted default rather than a rejected image branch
 - rejected AVX branch:
   - evaluator stayed exact
   - compose degraded to `1.47 ms`, final `5832.55`
@@ -169,6 +178,20 @@
   - a ready-only isolation benchmark showed `nginx + kestrel = 0.49 ms` versus `custom LB + backend UDS + kestrel = 68.59 ms` at the same `900 req/s` pressure
   - non-stripped NativeAOT symbol inspection shows the current LB binary is still dominated by async state-machine machinery in `HandleClientAsync`, `TryProxyRequestAsync`, `TryProxyResponseAsync`, `SendAllAsync`, and `RentAsync`
   - conclusion: the current async LB implementation family is not salvageable into a winner; any future custom LB should switch to a different lower-level implementation family instead of micro-tweaking the same shape
+- API runtime-image branch:
+  - validated Ubuntu WSL toolchain for future musl work with `.NET SDK 10.0.201`, `clang 18.1.3`, and the installed `musl-gcc` wrapper
+  - first quick reruns against the default `runtime-data` directory showed `FP = 1`, `FN = 1`, but that was traced to using the wrong artifact family instead of a true code or image regression
+  - rerunning on the accepted stable artifact family `runtime-data-256x128-radii-f32-stable-s524k` restored exactness for all image variants tested
+  - stable quick-screen control with `mcr.microsoft.com/dotnet/runtime-deps:10.0-noble`: `p99 = 35.88 ms`, `FP = 0`, `FN = 0`
+  - stable quick-screen musl static API on `scratch`: `p99 = 44.31 ms`, `FP = 0`, `FN = 0`
+  - stable quick-screen API on `mcr.microsoft.com/dotnet/runtime-deps:10.0-noble-chiseled`: `p99 = 58.03 ms`, `FP = 0`, `FN = 0`
+  - after fixing the stale Alpine SDK mismatch and rerunning full official benchmarks on the warmed stack, both `scratch` and `noble` reached the `6000` band; `noble-chiseled` remains rejected
+  - conclusion: promote the musl static `scratch` API path as the current submission default and keep `noble` as a fallback control, not as the only accepted runtime base
+
+- helper-container startup warm-up branch:
+  - tested a separate pre-ready warm-up helper that routed synthetic bypass-header load through `nginx`
+  - the branch was technically made to work, but its first measured short run still regressed badly and never proved better than the lighter built-in startup warm-up
+  - rejected in favor of the built-in warm-up path that already produced the official `6000` result
 
 ## Latest profiling anchors
 
@@ -215,5 +238,5 @@
 ## Current caveats
 
 - The stack is now exact on the official evaluator path, but it is still above the `0.5 ms` target.
-- The accepted baseline is short of the `6000` target by roughly `140` points on the latest reproduced run.
-- The fastest rejected branch so far was not the transport layer; it was a measurement trap from a micro-benchmark-only win.
+- The stack has now reached `6000`, but the current workstation still shows run-to-run variance near the `1.0 ms` score cutoff.
+- The next confidence gate should use the exact official script on GitHub Actions or another cleaner Linux host, not just this local workstation.

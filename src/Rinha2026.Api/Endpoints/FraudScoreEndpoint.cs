@@ -7,13 +7,20 @@ using Rinha2026.Api.Services;
 namespace Rinha2026.Api.Endpoints;
 
 public static class FraudScoreEndpoint {
+	internal const string StartupWarmupHeaderName = "X-Startup-Warmup";
+	internal const string StartupWarmupHeaderValue = "1";
+
 	public static async Task HandleAsync(
 		HttpContext context,
 		StartupState startupState,
 		FraudRuntimeState runtimeState,
 		RequestProfileCollector requestProfileCollector,
 		CancellationToken cancellationToken) {
-		if (!startupState.IsReady || !runtimeState.TryGet(out FraudDetectionService? detectionService) || (detectionService is null)) {
+		bool allowStartupWarmup = !startupState.IsReady &&
+			context.Request.Headers.TryGetValue(StartupWarmupHeaderName, out Microsoft.Extensions.Primitives.StringValues warmupHeader) &&
+			Microsoft.Extensions.Primitives.StringValues.Equals(warmupHeader, StartupWarmupHeaderValue);
+
+		if ((!startupState.IsReady && !allowStartupWarmup) || !runtimeState.TryGet(out FraudDetectionService? detectionService) || (detectionService is null)) {
 			context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
 			return;
 		}

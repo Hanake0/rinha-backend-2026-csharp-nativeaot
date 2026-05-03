@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.lb
+      args:
+        RUNTIME_BASE: ${LB_RUNTIME_BASE:-mcr.microsoft.com/dotnet/runtime-deps:10.0-noble}
     container_name: rinha2026-lb
     environment:
       ASPNETCORE_URLS: http://+:9999
@@ -26,6 +28,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+      args:
+        RUNTIME_BASE: ${API_RUNTIME_BASE:-mcr.microsoft.com/dotnet/runtime-deps:10.0-noble}
     container_name: rinha2026-api1
     environment:
       ASPNETCORE_URLS: http://+:9999
@@ -63,6 +67,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+      args:
+        RUNTIME_BASE: ${API_RUNTIME_BASE:-mcr.microsoft.com/dotnet/runtime-deps:10.0-noble}
     container_name: rinha2026-api2
     environment:
       ASPNETCORE_URLS: http://+:9999

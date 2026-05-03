@@ -78,6 +78,18 @@ public sealed class VectorSearchRuntime : IDisposable {
 		return true;
 	}
 
+	public int Warm() {
+		if (this.hierarchicalArtifacts is not null) {
+			return this.hierarchicalArtifacts.Warm();
+		}
+
+		if (this.exactFlatArtifacts is not null) {
+			return this.exactFlatArtifacts.Warm();
+		}
+
+		throw new InvalidOperationException("Search runtime was not initialized.");
+	}
+
 	public void Dispose() {
 		this.hierarchicalArtifacts?.Dispose();
 		this.exactFlatArtifacts?.Dispose();

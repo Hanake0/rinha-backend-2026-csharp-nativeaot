@@ -151,6 +151,36 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 		return MemoryMarshal.Cast<byte, float>(this.level1Centroids.GetSpan());
 	}
 
+	public int Warm() {
+		ObjectDisposedException.ThrowIf(this.disposed, this);
+
+		int checksum = this.FlatArtifacts.Warm();
+		checksum ^= this.level1Centroids.TouchEveryPage();
+		checksum ^= this.leafCentroids.TouchEveryPage();
+		checksum ^= this.leafPostingOffsets.TouchEveryPage();
+		checksum ^= this.leafPostingIds.TouchEveryPage();
+
+		if (this.leafRadii is not null) {
+			checksum ^= this.leafRadii.TouchEveryPage();
+		}
+
+		if (this.leafWithoutHistoryCounts is not null) {
+			checksum ^= this.leafWithoutHistoryCounts.TouchEveryPage();
+		}
+
+		ReadOnlySpan<byte> quantizedCentroids = MemoryMarshal.AsBytes<sbyte>(this.quantizedLeafCentroids);
+
+		for (int index = 0; index < quantizedCentroids.Length; index += 4096) {
+			checksum ^= quantizedCentroids[index];
+		}
+
+		if (!quantizedCentroids.IsEmpty) {
+			checksum ^= quantizedCentroids[^1];
+		}
+
+		return checksum;
+	}
+
 	public void Dispose() {
 		if (this.disposed) {
 			return;

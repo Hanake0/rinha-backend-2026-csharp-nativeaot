@@ -55,8 +55,23 @@ internal sealed class TemporaryArtifactCorpus : IDisposable {
 	}
 
 	public void Dispose() {
-		if (Directory.Exists(this.RootPath)) {
-			Directory.Delete(this.RootPath, recursive: true);
+		if (!Directory.Exists(this.RootPath)) {
+			return;
+		}
+
+		for (int attempt = 0; attempt < 10; attempt++) {
+			try {
+				Directory.Delete(this.RootPath, recursive: true);
+				return;
+			} catch (IOException) when (attempt < 9) {
+				Thread.Sleep(50);
+			} catch (UnauthorizedAccessException) when (attempt < 9) {
+				Thread.Sleep(50);
+			} catch (IOException) {
+				return;
+			} catch (UnauthorizedAccessException) {
+				return;
+			}
 		}
 	}
 

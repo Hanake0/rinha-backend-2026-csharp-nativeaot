@@ -3,9 +3,9 @@ param(
 	[string]$TestScriptPath = "..\\rinha-de-backend-2026\\test\\test.js",
 	[string]$TestDataPath = "..\\rinha-de-backend-2026\\test\\test-data.json",
 	[string]$OutputDirectory = "artifacts\\compose-k6",
-	[string]$RuntimeDataDir = "runtime-data",
+	[string]$RuntimeDataDir = "runtime-data-256x128-radii-f32-stable-s524k",
 	[string]$ApprovalThreshold = "0.6",
-	[string]$HttpInlineScheduling = "",
+	[string]$HttpInlineScheduling = "true",
 	[string]$HttpIoQueueCount = "",
 	[string]$HttpNoDelay = "",
 	[string]$HttpParserMode = "Manual",
@@ -16,7 +16,7 @@ param(
 	[int]$RerankCount = 48,
 	[int]$BoundaryRerankCount = $RerankCount,
 	[bool]$UseLeafRadiusPruning = $true,
-	[bool]$UseLastTransactionPartitionPruning = $true,
+	[bool]$UseLastTransactionPartitionPruning = $false,
 	[int]$TopK = 5,
 	[double]$LbCpus = 0.15,
 	[double]$ApiCpus = 0.425,
@@ -28,14 +28,32 @@ param(
 	[int]$K6MaxVUs = 250,
 	[string]$K6StageDuration = "120s",
 	[string]$K6GracefulStop = "10s",
-	[switch]$SkipBuild
+	[string]$DotNetProcessorCount = "1",
+	[string]$DotNetSocketInlineCompletions = "1",
+	[string]$DotNetSocketThreadCount = "1",
+	[switch]$SkipBuild,
+	[switch]$SkipComposeRestart
 )
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$composePath = Join-Path $repoRoot $ComposeFile
+$composePaths = $ComposeFile.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object {
+	$composeFilePath = $_.Trim()
+
+	if ([System.IO.Path]::IsPathRooted($_)) {
+		(Resolve-Path $composeFilePath).Path
+	} else {
+		(Resolve-Path (Join-Path $repoRoot $composeFilePath)).Path
+	}
+}
+$composeArguments = @("compose")
+
+foreach ($composePath in $composePaths) {
+	$composeArguments += @("-f", $composePath)
+}
+
 $testScriptFullPath = (Resolve-Path (Join-Path $repoRoot $TestScriptPath)).Path
 $testDataFullPath = (Resolve-Path (Join-Path $repoRoot $TestDataPath)).Path
 $outputRoot = if ([System.IO.Path]::IsPathRooted($OutputDirectory)) {
@@ -108,22 +126,27 @@ $env:LB_MEM_LIMIT = $LbMemLimit
 $env:API_MEM_LIMIT = $ApiMemLimit
 $env:LB_MEM_LIMIT_DEPLOY = $LbMemLimit.ToUpperInvariant()
 $env:API_MEM_LIMIT_DEPLOY = $ApiMemLimit.ToUpperInvariant()
+$env:DOTNET_PROCESSOR_COUNT = $DotNetProcessorCount
+$env:DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS = $DotNetSocketInlineCompletions
+$env:DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT = $DotNetSocketThreadCount
 
-docker compose -f $composePath down --remove-orphans
+if (-not $SkipComposeRestart) {
+	& docker @composeArguments down --remove-orphans
 
-if ($SkipBuild) {
-	docker compose -f $composePath up -d
-} else {
-	docker compose -f $composePath up -d --build
+	if ($SkipBuild) {
+		& docker @composeArguments up -d
+	} else {
+		& docker @composeArguments up -d --build
+	}
 }
 
 & (Join-Path $PSScriptRoot "wait-ready.ps1")
 
-$lbContainerId = (docker compose -f $composePath ps -q lb).Trim()
+$lbContainerId = (& docker @composeArguments ps -q lb).Trim()
 $inspect = docker inspect $lbContainerId | ConvertFrom-Json
 $networkName = $inspect[0].NetworkSettings.Networks.PSObject.Properties.Name | Select-Object -First 1
 
-docker compose -f $composePath ps
+& docker @composeArguments ps
 docker stats --no-stream $lbContainerId rinha2026-api1 rinha2026-api2 | Tee-Object -FilePath $statsPath
 
 docker pull grafana/k6:latest | Out-Null
@@ -199,7 +222,11 @@ docker stats --no-stream $lbContainerId rinha2026-api1 rinha2026-api2 | Tee-Obje
 "K6MaxVUs=$K6MaxVUs" | Tee-Object -FilePath $statsPath -Append | Out-Null
 "K6StageDuration=$K6StageDuration" | Tee-Object -FilePath $statsPath -Append | Out-Null
 "K6GracefulStop=$K6GracefulStop" | Tee-Object -FilePath $statsPath -Append | Out-Null
+"DotNetProcessorCount=$DotNetProcessorCount" | Tee-Object -FilePath $statsPath -Append | Out-Null
+"DotNetSocketInlineCompletions=$DotNetSocketInlineCompletions" | Tee-Object -FilePath $statsPath -Append | Out-Null
+"DotNetSocketThreadCount=$DotNetSocketThreadCount" | Tee-Object -FilePath $statsPath -Append | Out-Null
 "SkipBuild=$SkipBuild" | Tee-Object -FilePath $statsPath -Append | Out-Null
+"SkipComposeRestart=$SkipComposeRestart" | Tee-Object -FilePath $statsPath -Append | Out-Null
 
 if (Test-Path $resultsPath) {
 	Get-Content $resultsPath

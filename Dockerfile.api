@@ -1,3 +1,5 @@
+ARG RUNTIME_BASE=mcr.microsoft.com/dotnet/runtime-deps:10.0-noble
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -15,7 +17,7 @@ RUN dotnet publish src/Rinha2026.Api/Rinha2026.Api.csproj \
     -p:PublishAot=true \
     -p:StripSymbols=true
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-noble AS runtime
+FROM ${RUNTIME_BASE} AS runtime
 WORKDIR /app
 
 ENV ASPNETCORE_URLS=http://+:9999

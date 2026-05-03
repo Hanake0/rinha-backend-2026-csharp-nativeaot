@@ -65,6 +65,24 @@ public sealed unsafe class MemoryMappedReadOnlyBuffer : IDisposable {
 		return new ReadOnlySpan<byte>(this.pointer, checked((int)this.Length));
 	}
 
+	public int TouchEveryPage(int pageSize = 4096) {
+		ReadOnlySpan<byte> span = this.GetSpan();
+
+		if (span.IsEmpty) {
+			return 0;
+		}
+
+		int checksum = 0;
+		int stride = Math.Max(pageSize, 1);
+
+		for (int index = 0; index < span.Length; index += stride) {
+			checksum ^= span[index];
+		}
+
+		checksum ^= span[^1];
+		return checksum;
+	}
+
 	public void Dispose() {
 		if (this.disposed) {
 			return;

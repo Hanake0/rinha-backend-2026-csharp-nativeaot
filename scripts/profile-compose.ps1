@@ -4,9 +4,9 @@ param(
 	[string]$TestScriptPath = "..\\rinha-de-backend-2026\\test\\test.js",
 	[string]$TestDataPath = "..\\rinha-de-backend-2026\\test\\test-data.json",
 	[string]$OutputDirectory = "artifacts\\compose-profile",
-	[string]$RuntimeDataDir = "runtime-data",
+	[string]$RuntimeDataDir = "runtime-data-256x128-radii-f32-stable-s524k",
 	[string]$ApprovalThreshold = "0.6",
-	[string]$HttpInlineScheduling = "",
+	[string]$HttpInlineScheduling = "true",
 	[string]$HttpIoQueueCount = "",
 	[string]$HttpNoDelay = "",
 	[string]$HttpParserMode = "Manual",
@@ -17,7 +17,7 @@ param(
 	[int]$RerankCount = 48,
 	[int]$BoundaryRerankCount = $RerankCount,
 	[bool]$UseLeafRadiusPruning = $true,
-	[bool]$UseLastTransactionPartitionPruning = $true,
+	[bool]$UseLastTransactionPartitionPruning = $false,
 	[int]$TopK = 5,
 	[double]$LbCpus = 0.15,
 	[double]$ApiCpus = 0.425,
@@ -36,7 +36,21 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$composePath = Join-Path $repoRoot $ComposeFile
+$composePaths = $ComposeFile.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object {
+	$composeFilePath = $_.Trim()
+
+	if ([System.IO.Path]::IsPathRooted($_)) {
+		(Resolve-Path $composeFilePath).Path
+	} else {
+		(Resolve-Path (Join-Path $repoRoot $composeFilePath)).Path
+	}
+}
+$composeArguments = @("compose")
+
+foreach ($composePath in $composePaths) {
+	$composeArguments += @("-f", $composePath)
+}
+
 $profileComposePath = Join-Path $repoRoot $ProfileComposeFile
 $testScriptFullPath = (Resolve-Path (Join-Path $repoRoot $TestScriptPath)).Path
 $testDataFullPath = (Resolve-Path (Join-Path $repoRoot $TestDataPath)).Path
@@ -113,12 +127,12 @@ $env:API_MEM_LIMIT = $ApiMemLimit
 $env:LB_MEM_LIMIT_DEPLOY = $LbMemLimit.ToUpperInvariant()
 $env:API_MEM_LIMIT_DEPLOY = $ApiMemLimit.ToUpperInvariant()
 
-docker compose -f $composePath -f $profileComposePath down --remove-orphans
+& docker @composeArguments -f $profileComposePath down --remove-orphans
 
 if ($SkipBuild) {
-	docker compose -f $composePath -f $profileComposePath up -d
+	& docker @composeArguments -f $profileComposePath up -d
 } else {
-	docker compose -f $composePath -f $profileComposePath up -d --build
+	& docker @composeArguments -f $profileComposePath up -d --build
 }
 
 & (Join-Path $PSScriptRoot "wait-ready.ps1")
@@ -127,7 +141,7 @@ Invoke-RestMethod -Uri "http://localhost:10001/debug/profile/reset" -Method Post
 Invoke-RestMethod -Uri "http://localhost:10002/debug/profile/reset" -Method Post | Out-Null
 
 $samplerScript = {
-	param($composePathValue, $profileComposePathValue, $outputPath)
+	param($composeArgumentValues, $profileComposePathValue, $outputPath)
 
 	[System.IO.File]::WriteAllText(
 		$outputPath,
@@ -136,7 +150,7 @@ $samplerScript = {
 
 	while ($true) {
 		$timestamp = (Get-Date).ToString("o", [System.Globalization.CultureInfo]::InvariantCulture)
-		$stats = docker compose -f $composePathValue -f $profileComposePathValue ps -q | ForEach-Object {
+		$stats = & docker @composeArgumentValues -f $profileComposePathValue ps -q | ForEach-Object {
 			docker stats --no-stream --format "{{.Name}},{{.CPUPerc}},{{.MemUsage}},{{.MemPerc}},{{.NetIO}},{{.BlockIO}},{{.PIDs}}" $_
 		}
 
@@ -151,10 +165,10 @@ $samplerScript = {
 	}
 }
 
-$samplerJob = Start-Job -ScriptBlock $samplerScript -ArgumentList $composePath, $profileComposePath, $memorySamplesPath
+$samplerJob = Start-Job -ScriptBlock $samplerScript -ArgumentList (, $composeArguments), $profileComposePath, $memorySamplesPath
 
 try {
-	$lbContainerId = (docker compose -f $composePath -f $profileComposePath ps -q lb).Trim()
+	$lbContainerId = (& docker @composeArguments -f $profileComposePath ps -q lb).Trim()
 	$inspect = docker inspect $lbContainerId | ConvertFrom-Json
 	$networkName = $inspect[0].NetworkSettings.Networks.PSObject.Properties.Name | Select-Object -First 1
 

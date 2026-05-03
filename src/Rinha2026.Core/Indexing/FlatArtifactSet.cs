@@ -143,6 +143,25 @@ public sealed class FlatArtifactSet : IDisposable {
 		return originalIds[vectorIndex];
 	}
 
+	public int Warm() {
+		ObjectDisposedException.ThrowIf(this.disposed, this);
+
+		int checksum = 0;
+		checksum ^= this.quantizedVectors.TouchEveryPage();
+		checksum ^= this.rerankVectors.TouchEveryPage();
+		checksum ^= this.labelBitset.TouchEveryPage();
+
+		if (this.fullPrecisionRerankVectors is not null) {
+			checksum ^= this.fullPrecisionRerankVectors.TouchEveryPage();
+		}
+
+		if (this.originalVectorIds is not null) {
+			checksum ^= this.originalVectorIds.TouchEveryPage();
+		}
+
+		return checksum;
+	}
+
 	public void Dispose() {
 		if (this.disposed) {
 			return;

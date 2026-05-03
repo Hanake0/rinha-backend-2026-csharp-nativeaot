@@ -38,6 +38,24 @@ public sealed class FraudDetectionServiceParityTests {
 
 	[Theory]
 	[InlineData(ParserMode.Manual, 46)]
+	[InlineData(ParserMode.ReferenceStj, 527)]
+	public void FraudDetectionServiceWarmUpPreservesOfficialExpectation(ParserMode parserMode, int requestIndex) {
+		RuntimeConfig runtimeConfig = CreateRuntimeConfig(parserMode);
+		OfficialRequestEntry entry = LoadOfficialEntry(requestIndex);
+
+		using FraudDetectionService service = FraudDetectionService.Create(runtimeConfig);
+		service.WarmUp();
+
+		Assert.True(service.TryHandle(entry.Payload, out ReadOnlyMemory<byte> response));
+
+		using JsonDocument document = JsonDocument.Parse(response);
+		bool approved = document.RootElement.GetProperty("approved").GetBoolean();
+
+		Assert.Equal(entry.ExpectedApproved, approved);
+	}
+
+	[Theory]
+	[InlineData(ParserMode.Manual, 46)]
 	[InlineData(ParserMode.Manual, 527)]
 	[InlineData(ParserMode.Manual, 732)]
 	[InlineData(ParserMode.ReferenceStj, 46)]
