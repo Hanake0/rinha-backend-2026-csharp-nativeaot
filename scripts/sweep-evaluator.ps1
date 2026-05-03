@@ -61,6 +61,7 @@ foreach ($runtimeDataDir in $RuntimeDataDirs) {
 					--trace-every $TraceEvery
 
 				$result = $json | ConvertFrom-Json
+				$trace = $result.Trace
 				$results.Add([pscustomobject]@{
 						runtime_data = $runtimeDataDir
 						beam_level1 = $beamLevel1
@@ -74,6 +75,27 @@ foreach ($runtimeDataDir in $RuntimeDataDirs) {
 						search_p99_us = [double]$result.Latency.SearchUs.P99
 						search_mean_us = [double]$result.Latency.SearchUs.Mean
 						throughput_per_second = [double]$result.Latency.ThroughputPerSecond
+						trace_sample_count = if ($trace) { [int]$trace.SampleCount } else { 0 }
+						trace_candidate_scan_p50 = if ($trace) { [int]$trace.CandidateScanCount.P50 } else { 0 }
+						trace_candidate_scan_p95 = if ($trace) { [int]$trace.CandidateScanCount.P95 } else { 0 }
+						trace_candidate_scan_p99 = if ($trace) { [int]$trace.CandidateScanCount.P99 } else { 0 }
+						trace_candidate_scan_mean = if ($trace) { [int]$trace.CandidateScanCount.Mean } else { 0 }
+						trace_candidate_rerank_p50 = if ($trace) { [int]$trace.CandidateRerankCount.P50 } else { 0 }
+						trace_candidate_rerank_p95 = if ($trace) { [int]$trace.CandidateRerankCount.P95 } else { 0 }
+						trace_candidate_rerank_p99 = if ($trace) { [int]$trace.CandidateRerankCount.P99 } else { 0 }
+						trace_candidate_rerank_mean = if ($trace) { [int]$trace.CandidateRerankCount.Mean } else { 0 }
+						trace_selected_leaf_p50 = if ($trace) { [int]$trace.SelectedLeafCount.P50 } else { 0 }
+						trace_selected_leaf_p95 = if ($trace) { [int]$trace.SelectedLeafCount.P95 } else { 0 }
+						trace_selected_leaf_p99 = if ($trace) { [int]$trace.SelectedLeafCount.P99 } else { 0 }
+						trace_selected_leaf_mean = if ($trace) { [int]$trace.SelectedLeafCount.Mean } else { 0 }
+						trace_max_leaf_size_p50 = if ($trace) { [int]$trace.MaxSelectedLeafSize.P50 } else { 0 }
+						trace_max_leaf_size_p95 = if ($trace) { [int]$trace.MaxSelectedLeafSize.P95 } else { 0 }
+						trace_max_leaf_size_p99 = if ($trace) { [int]$trace.MaxSelectedLeafSize.P99 } else { 0 }
+						trace_max_leaf_size_mean = if ($trace) { [int]$trace.MaxSelectedLeafSize.Mean } else { 0 }
+						trace_secondary_scan_p50 = if ($trace) { [int]$trace.SecondaryCandidateScanCount.P50 } else { 0 }
+						trace_secondary_scan_p95 = if ($trace) { [int]$trace.SecondaryCandidateScanCount.P95 } else { 0 }
+						trace_secondary_scan_p99 = if ($trace) { [int]$trace.SecondaryCandidateScanCount.P99 } else { 0 }
+						trace_secondary_scan_mean = if ($trace) { [int]$trace.SecondaryCandidateScanCount.Mean } else { 0 }
 					})
 			}
 		}
