@@ -62,8 +62,63 @@ public sealed class HierarchicalBeamSearchEngine {
 
 		int parentCount = this.SelectNearestParents(query, parentIds, parentDistances);
 		int leafCount = this.SelectNearestLeaves(query, parentIds[..parentCount], leafIds, leafDistances);
-		int candidateCount = this.SelectTopCandidates(quantizedQuery, leafIds[..leafCount], candidateIds, candidateDistances);
+		int candidateCount = this.SelectTopCandidates(
+			quantizedQuery,
+			leafIds[..leafCount],
+			candidateIds,
+			candidateDistances,
+			out _,
+			out _,
+			out _);
 		return this.RerankCandidates(query, candidateIds[..candidateCount], destination);
+	}
+
+	public HierarchicalSearchTrace Trace(
+		ReadOnlySpan<float> query,
+		int beamLevel1,
+		int beamLevel2,
+		int rerankCount) {
+		FlatArtifactSet flatArtifacts = this.artifactSet.FlatArtifacts;
+
+		if (query.Length < flatArtifacts.PaddedDimension) {
+			throw new ArgumentException("Query vector does not match the padded index dimension.", nameof(query));
+		}
+
+		int parentBeamCount = Math.Clamp(beamLevel1, 1, this.artifactSet.Level1ClusterCount);
+		int leafBeamCount = Math.Clamp(beamLevel2, 1, this.artifactSet.LeafCount);
+		int candidateCapacity = Math.Clamp(
+			rerankCount,
+			1,
+			checked((int)flatArtifacts.VectorCount));
+
+		Span<int> parentIds = parentBeamCount <= 128 ? stackalloc int[parentBeamCount] : new int[parentBeamCount];
+		Span<float> parentDistances = parentBeamCount <= 128 ? stackalloc float[parentBeamCount] : new float[parentBeamCount];
+		Span<int> leafIds = leafBeamCount <= 512 ? stackalloc int[leafBeamCount] : new int[leafBeamCount];
+		Span<float> leafDistances = leafBeamCount <= 512 ? stackalloc float[leafBeamCount] : new float[leafBeamCount];
+		Span<int> candidateIds = candidateCapacity <= 512 ? stackalloc int[candidateCapacity] : new int[candidateCapacity];
+		Span<int> candidateDistances = candidateCapacity <= 512 ? stackalloc int[candidateCapacity] : new int[candidateCapacity];
+		Span<sbyte> quantizedQuery = stackalloc sbyte[flatArtifacts.PaddedDimension];
+
+		VectorEncoding.EncodeQ8Symmetric(query[..flatArtifacts.PaddedDimension], quantizedQuery);
+
+		int parentCount = this.SelectNearestParents(query, parentIds, parentDistances);
+		int leafCount = this.SelectNearestLeaves(query, parentIds[..parentCount], leafIds, leafDistances);
+		int candidateCount = this.SelectTopCandidates(
+			quantizedQuery,
+			leafIds[..leafCount],
+			candidateIds,
+			candidateDistances,
+			out int scannedCandidateCount,
+			out int maxSelectedLeafSize,
+			out int minSelectedLeafSize);
+
+		return new HierarchicalSearchTrace(
+			parentCount,
+			leafCount,
+			scannedCandidateCount,
+			candidateCount,
+			maxSelectedLeafSize,
+			minSelectedLeafSize);
 	}
 
 	private int SelectNearestParents(ReadOnlySpan<float> query, Span<int> destinationIds, Span<float> destinationDistances) {
@@ -110,26 +165,55 @@ public sealed class HierarchicalBeamSearchEngine {
 		ReadOnlySpan<sbyte> query,
 		ReadOnlySpan<int> selectedLeaves,
 		Span<int> destinationIds,
-		Span<int> destinationDistances) {
+		Span<int> destinationDistances,
+		out int scannedCandidateCount,
+		out int maxSelectedLeafSize,
+		out int minSelectedLeafSize) {
 		ReadOnlySpan<int> postingOffsets = this.artifactSet.GetLeafPostingOffsets();
-		ReadOnlySpan<int> postingIds = this.artifactSet.GetLeafPostingIds();
 		ReadOnlySpan<byte> quantizedVectors = this.artifactSet.FlatArtifacts.GetQuantizedVectors();
 		int paddedDimension = this.artifactSet.FlatArtifacts.PaddedDimension;
 		int count = 0;
+		int leafCount = 0;
+		scannedCandidateCount = 0;
+		maxSelectedLeafSize = 0;
+		minSelectedLeafSize = int.MaxValue;
 
 		for (int leafIndex = 0; leafIndex < selectedLeaves.Length; leafIndex++) {
 			int leafId = selectedLeaves[leafIndex];
 			int start = postingOffsets[leafId];
 			int end = postingOffsets[leafId + 1];
+			int leafSize = end - start;
+			scannedCandidateCount += leafSize;
+			maxSelectedLeafSize = Math.Max(maxSelectedLeafSize, leafSize);
+			minSelectedLeafSize = Math.Min(minSelectedLeafSize, leafSize);
+			leafCount++;
 
-			for (int postingIndex = start; postingIndex < end; postingIndex++) {
-				int vectorId = postingIds[postingIndex];
-				int vectorOffset = checked(vectorId * paddedDimension);
-				int distance = DistanceComputations.SquaredL2Q8(
+			if (this.artifactSet.UsesIdentityPostings) {
+				ScanIdentityPostingLeaf(
 					query,
-					quantizedVectors.Slice(vectorOffset, paddedDimension));
-				InsertSorted(destinationIds, destinationDistances, ref count, vectorId, distance);
+					quantizedVectors,
+					paddedDimension,
+					start,
+					end,
+					destinationIds,
+					destinationDistances,
+					ref count);
+			} else {
+				ScanExplicitPostingLeaf(
+					query,
+					this.artifactSet.GetLeafPostingIds(),
+					quantizedVectors,
+					paddedDimension,
+					start,
+					end,
+					destinationIds,
+					destinationDistances,
+					ref count);
 			}
+		}
+
+		if (leafCount == 0) {
+			minSelectedLeafSize = 0;
 		}
 
 		return count;
@@ -232,6 +316,46 @@ public sealed class HierarchicalBeamSearchEngine {
 
 		if (count < destinationIds.Length) {
 			count++;
+		}
+	}
+
+	private static void ScanExplicitPostingLeaf(
+		ReadOnlySpan<sbyte> query,
+		ReadOnlySpan<int> postingIds,
+		ReadOnlySpan<byte> quantizedVectors,
+		int paddedDimension,
+		int start,
+		int end,
+		Span<int> destinationIds,
+		Span<int> destinationDistances,
+		ref int count) {
+		for (int postingIndex = start; postingIndex < end; postingIndex++) {
+			int vectorId = postingIds[postingIndex];
+			int vectorOffset = checked(vectorId * paddedDimension);
+			int distance = DistanceComputations.SquaredL2Q8(
+				query,
+				quantizedVectors.Slice(vectorOffset, paddedDimension));
+			InsertSorted(destinationIds, destinationDistances, ref count, vectorId, distance);
+		}
+	}
+
+	private static void ScanIdentityPostingLeaf(
+		ReadOnlySpan<sbyte> query,
+		ReadOnlySpan<byte> quantizedVectors,
+		int paddedDimension,
+		int start,
+		int end,
+		Span<int> destinationIds,
+		Span<int> destinationDistances,
+		ref int count) {
+		int vectorOffset = checked(start * paddedDimension);
+
+		for (int vectorId = start; vectorId < end; vectorId++) {
+			int distance = DistanceComputations.SquaredL2Q8(
+				query,
+				quantizedVectors.Slice(vectorOffset, paddedDimension));
+			InsertSorted(destinationIds, destinationDistances, ref count, vectorId, distance);
+			vectorOffset += paddedDimension;
 		}
 	}
 }

@@ -54,6 +54,20 @@ public sealed class VectorSearchRuntime : IDisposable {
 		throw new InvalidOperationException("Search runtime was not initialized.");
 	}
 
+	public bool TryTrace(ReadOnlySpan<float> query, out HierarchicalSearchTrace trace) {
+		if (this.hierarchicalEngine is null) {
+			trace = default;
+			return false;
+		}
+
+		trace = this.hierarchicalEngine.Trace(
+			query,
+			this.searchConfig.BeamLevel1,
+			this.searchConfig.BeamLevel2,
+			this.searchConfig.RerankCount);
+		return true;
+	}
+
 	public void Dispose() {
 		this.hierarchicalArtifacts?.Dispose();
 		this.exactFlatArtifacts?.Dispose();

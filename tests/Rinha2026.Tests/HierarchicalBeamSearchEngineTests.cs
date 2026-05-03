@@ -74,7 +74,7 @@ public sealed class HierarchicalBeamSearchEngineTests {
 			hits);
 
 		Assert.Equal(3, count);
-		Assert.All(hits, static hit => Assert.True(hit.Index <= 3));
+		Assert.All(hits, static hit => Assert.InRange(hit.Distance, 0f, 0.01f));
 	}
 
 	private static float[] CreateQuery(float first, float second, float third) {

@@ -20,11 +20,14 @@ public sealed class ExactFlatSearchEngineTests {
 		int count = engine.Search(CreateQuery(0.16f, 0.16f, 0.16f), hits);
 
 		Assert.Equal(3, count);
-		Assert.Equal(3, hits[0].Index);
-		Assert.Equal(1, hits[1].Index);
-		Assert.Equal(0, hits[2].Index);
 		Assert.True(hits[0].Distance <= hits[1].Distance);
 		Assert.True(hits[1].Distance <= hits[2].Distance);
+		Assert.False(hits[0].IsFraud);
+		Assert.True(hits[1].IsFraud);
+		Assert.False(hits[2].IsFraud);
+		Assert.InRange(hits[0].Distance, 0.0002f, 0.0005f);
+		Assert.InRange(hits[1].Distance, 0.004f, 0.006f);
+		Assert.InRange(hits[2].Distance, 0.009f, 0.012f);
 	}
 
 	[Fact]
@@ -42,7 +45,11 @@ public sealed class ExactFlatSearchEngineTests {
 		int fraudCount = engine.CountFraud(CreateQuery(0.24f, 0.24f, 0.24f), hits);
 
 		Assert.Equal(2, fraudCount);
-		Assert.Equal([1, 2, 0], hits.Select(static hit => hit.Index).ToArray());
+		Assert.True(hits[0].Distance <= hits[1].Distance);
+		Assert.True(hits[1].Distance <= hits[2].Distance);
+		Assert.True(hits[0].IsFraud);
+		Assert.True(hits[1].IsFraud);
+		Assert.False(hits[2].IsFraud);
 	}
 
 	private static float[] CreateQuery(float first, float second, float third) {
