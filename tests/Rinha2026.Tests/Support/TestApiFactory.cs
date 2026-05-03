@@ -26,6 +26,7 @@ internal static class TestApiFactory {
 				IndexKind: indexKind,
 				PaddedDimension: 16,
 				RerankCount: 48,
+				UseLeafRadiusPruning: false,
 				UseLastTransactionPartitionPruning: true),
 			new RuntimeHttpConfig(
 				ParserMode: parserMode,

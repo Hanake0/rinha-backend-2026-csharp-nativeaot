@@ -43,6 +43,8 @@ public sealed class SearchSettings {
 
 	public int RerankCount { get; init; } = 48;
 
+	public bool UseLeafRadiusPruning { get; init; }
+
 	public bool UseLastTransactionPartitionPruning { get; init; } = true;
 }
 

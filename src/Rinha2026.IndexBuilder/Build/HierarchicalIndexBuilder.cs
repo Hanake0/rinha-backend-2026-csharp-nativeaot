@@ -59,6 +59,11 @@ internal static class HierarchicalIndexBuilder {
 				quantizedVectors.GetSpan(),
 				paddedDimension)
 			: BuildPostingIds(assignments, postingOffsets);
+		float[] leafRadiusBounds = BuildLeafRadiusBounds(
+			assignments,
+			quantizedVectors.GetSpan(),
+			paddedDimension,
+			leafCentroids);
 		RewriteFlatArtifactsInLeafOrder(options.OutputDirectory, baseManifest, quantizedVectors, orderedOriginalIds);
 		int[] postingIds = BuildIdentityPostingIds(vectorCount);
 
@@ -78,6 +83,10 @@ internal static class HierarchicalIndexBuilder {
 			Path.Combine(options.OutputDirectory, baseManifest.LeafPostingIdsFile),
 			postingIds,
 			cancellationToken);
+		await WriteFloatArrayAsync(
+			Path.Combine(options.OutputDirectory, "leaf.radius.q8.f32.bin"),
+			leafRadiusBounds,
+			cancellationToken);
 
 		if (options.UseLastTransactionPartitioning) {
 			await WriteIntArrayAsync(
@@ -93,6 +102,7 @@ internal static class HierarchicalIndexBuilder {
 			LabelBitsetFile = baseManifest.LabelBitsetFile,
 			LabelEncoding = baseManifest.LabelEncoding,
 			LeafCentroidFile = baseManifest.LeafCentroidFile,
+			LeafRadiusFile = "leaf.radius.q8.f32.bin",
 			LeafPostingIdsFile = baseManifest.LeafPostingIdsFile,
 			LeafPostingOffsetsFile = baseManifest.LeafPostingOffsetsFile,
 			LeafWithoutHistoryCountFile = options.UseLastTransactionPartitioning
@@ -180,6 +190,38 @@ internal static class HierarchicalIndexBuilder {
 
 		postingOffsets[leafCounts.Length] = running;
 		return postingOffsets;
+	}
+
+	private static float[] BuildLeafRadiusBounds(
+		ReadOnlySpan<int> assignments,
+		ReadOnlySpan<byte> quantizedVectors,
+		int paddedDimension,
+		ReadOnlySpan<float> leafCentroids) {
+		int leafCount = leafCentroids.Length / paddedDimension;
+		int[] maxSquaredDistances = new int[leafCount];
+		sbyte[] quantizedLeafCentroids = new sbyte[leafCentroids.Length];
+		VectorEncoding.EncodeQ8Symmetric(leafCentroids, quantizedLeafCentroids);
+
+		for (int vectorIndex = 0; vectorIndex < assignments.Length; vectorIndex++) {
+			int leafId = assignments[vectorIndex];
+			int vectorOffset = checked(vectorIndex * paddedDimension);
+			int centroidOffset = checked(leafId * paddedDimension);
+			int squaredDistance = ComputeSquaredL2Q8(
+				MemoryMarshal.Cast<byte, sbyte>(quantizedVectors.Slice(vectorOffset, paddedDimension)),
+				quantizedLeafCentroids.AsSpan(centroidOffset, paddedDimension));
+
+			if (squaredDistance > maxSquaredDistances[leafId]) {
+				maxSquaredDistances[leafId] = squaredDistance;
+			}
+		}
+
+		float[] radiusBounds = new float[maxSquaredDistances.Length];
+
+		for (int leafIndex = 0; leafIndex < radiusBounds.Length; leafIndex++) {
+			radiusBounds[leafIndex] = MathF.Sqrt(maxSquaredDistances[leafIndex]);
+		}
+
+		return radiusBounds;
 	}
 
 	private static void AssignAllVectorsToLeaves(
@@ -364,6 +406,15 @@ internal static class HierarchicalIndexBuilder {
 			quantizedVectors.Slice(vectorOffset, paddedDimension));
 		return (vector[5] == -127) && (vector[6] == -127);
 	}
+
+	private static int ComputeSquaredL2Q8(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
+		int distance = 0;
+
+		for (int dimension = 0; dimension < left.Length; dimension++) {
+			int difference = left[dimension] - right[dimension];
+			distance += difference * difference;
+		}
+
+		return distance;
+	}
 }
-
-

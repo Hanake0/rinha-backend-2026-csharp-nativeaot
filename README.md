@@ -19,10 +19,11 @@ Planning documents live outside this repo in [`../plans`](../plans/).
 - search mode: `HierarchicalBeamIvf`
 - default search settings:
   - `beamLevel1 = 8`
-  - `beamLevel2 = 72`
+  - `beamLevel2 = 128`
   - `rerankCount = 48`
   - `topK = 5`
   - `approvalThreshold = 0.6`
+  - `useLeafRadiusPruning = true`
 - constrained runtime split:
   - `lb = 0.15 CPU / 48 MB`
   - `api1 = 0.425 CPU / 151 MB`
@@ -91,7 +92,7 @@ Official corpus evaluator:
 powershell -ExecutionPolicy Bypass -File .\scripts\evaluate-official.ps1 `
   -ParseMode ServiceManual `
   -BeamLevel1 8 `
-  -BeamLevel2 72 `
+  -BeamLevel2 128 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6
@@ -112,10 +113,11 @@ Constrained full-stack benchmark:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\benchmark-official-compose.ps1 `
   -BeamLevel1 8 `
-  -BeamLevel2 72 `
+  -BeamLevel2 128 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6 `
+  -UseLeafRadiusPruning true `
   -HttpParserMode Manual `
   -HttpIoQueueCount 0 `
   -HttpInlineScheduling true `

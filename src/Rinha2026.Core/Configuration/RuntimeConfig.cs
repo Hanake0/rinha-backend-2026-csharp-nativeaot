@@ -26,6 +26,7 @@ public readonly record struct RuntimeSearchConfig(
 	IndexKind IndexKind,
 	int PaddedDimension,
 	int RerankCount,
+	bool UseLeafRadiusPruning,
 	bool UseLastTransactionPartitionPruning);
 
 public readonly record struct RuntimeHttpConfig(

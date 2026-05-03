@@ -82,7 +82,10 @@ public sealed class VectorSearchRuntime : IDisposable {
 
 	private static VectorSearchRuntime LoadHierarchical(RuntimeConfig runtimeConfig) {
 		HierarchicalArtifactSet artifacts = HierarchicalArtifactSet.Load(runtimeConfig.Dataset.IndexDirectory);
-		HierarchicalBeamSearchEngine engine = new(artifacts, runtimeConfig.Search.UseLastTransactionPartitionPruning);
+		HierarchicalBeamSearchEngine engine = new(
+			artifacts,
+			runtimeConfig.Search.UseLastTransactionPartitionPruning,
+			runtimeConfig.Search.UseLeafRadiusPruning);
 		return new VectorSearchRuntime(runtimeConfig.Search, artifacts, engine);
 	}
 }

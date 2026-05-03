@@ -27,6 +27,7 @@ public static class RuntimeConfigFactory {
 			settings.Search.IndexKind,
 			settings.Search.PaddedDimension,
 			settings.Search.RerankCount,
+			settings.Search.UseLeafRadiusPruning,
 			settings.Search.UseLastTransactionPartitionPruning);
 
 		RuntimeHttpConfig http = new(

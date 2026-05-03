@@ -2,18 +2,21 @@
 
 ## Scope
 
-This file records the constrained full-stack request-stage profile of the promoted `256x128` default submission shape.
+This file records the constrained full-stack request-stage profile captured after q8 leaf-radius pruning made the wider-leaf frontier viable.
+
+The sampled profile below used the near-best `8/96/48` point on the pruning-enabled artifact family because it was stable and representative of the new search-path shape.
 
 ## Command
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\profile-compose.ps1 `
-  -RuntimeDataDir runtime-data-256x128-s524k `
+  -RuntimeDataDir runtime-data-256x128-radii-s524k `
   -BeamLevel1 8 `
-  -BeamLevel2 72 `
+  -BeamLevel2 96 `
   -RerankCount 48 `
   -TopK 5 `
   -ApprovalThreshold 0.6 `
+  -UseLeafRadiusPruning true `
   -HttpParserMode Manual `
   -HttpIoQueueCount 0 `
   -HttpInlineScheduling true `
@@ -34,21 +37,21 @@ powershell -ExecutionPolicy Bypass -File scripts\profile-compose.ps1 `
 
 API1 sampled `422` requests out of `27,029`:
 
-- `bodyReadUs`: `p50 = 1.944`, `p95 = 2.636`, `p99 = 3.737`
-- `parseUs`: `p50 = 2.405`, `p95 = 3.316`, `p99 = 4.178`
-- `vectorizeUs`: `p50 = 0.361`, `p95 = 0.521`, `p99 = 0.902`
-- `searchUs`: `p50 = 247.582`, `p95 = 1458.977`, `p99 = 1667.811`
-- `responseWriteUs`: `p50 = 36.842`, `p95 = 49.455`, `p99 = 67.941`
-- `totalUs`: `p50 = 290.156`, `p95 = 1513.403`, `p99 = 1722.137`
+- `bodyReadUs`: `p50 = 1.794`, `p95 = 3.718`, `p99 = 7.284`
+- `parseUs`: `p50 = 2.294`, `p95 = 3.715`, `p99 = 5.120`
+- `vectorizeUs`: `p50 = 0.361`, `p95 = 0.741`, `p99 = 1.342`
+- `searchUs`: `p50 = 182.303`, `p95 = 503.231`, `p99 = 621.202`
+- `responseWriteUs`: `p50 = 36.160`, `p95 = 46.451`, `p99 = 52.783`
+- `totalUs`: `p50 = 225.705`, `p95 = 558.397`, `p99 = 679.125`
 
 API2 sampled `422` requests out of `27,030`:
 
-- `bodyReadUs`: `p50 = 1.924`, `p95 = 2.746`, `p99 = 5.040`
-- `parseUs`: `p50 = 2.405`, `p95 = 3.216`, `p99 = 4.258`
-- `vectorizeUs`: `p50 = 0.380`, `p95 = 0.681`, `p99 = 1.312`
-- `searchUs`: `p50 = 211.470`, `p95 = 1359.863`, `p99 = 1573.081`
-- `responseWriteUs`: `p50 = 36.841`, `p95 = 47.392`, `p99 = 54.577`
-- `totalUs`: `p50 = 257.439`, `p95 = 1397.507`, `p99 = 1621.976`
+- `bodyReadUs`: `p50 = 1.784`, `p95 = 3.522`, `p99 = 6.272`
+- `parseUs`: `p50 = 2.314`, `p95 = 3.684`, `p99 = 4.950`
+- `vectorizeUs`: `p50 = 0.371`, `p95 = 0.852`, `p99 = 1.423`
+- `searchUs`: `p50 = 190.178`, `p95 = 525.153`, `p99 = 601.502`
+- `responseWriteUs`: `p50 = 36.069`, `p95 = 47.944`, `p99 = 61.630`
+- `totalUs`: `p50 = 235.023`, `p95 = 575.195`, `p99 = 641.539`
 
 ## Memory and CPU profile
 
@@ -60,17 +63,17 @@ Representative steady-state samples from `memory-samples.csv`:
 
 ## Interpretation
 
-- Body read, JSON parse, and vectorization are already below the noise floor relative to the search path.
-- Response write is measurable but still small.
-- Search dominates both the median and the tail even after the topology improvement.
-- Memory pressure is not the current limiter. There is still room to spend more memory if it buys materially better selectivity or lower rerank cost.
-- Response write remains visible at about `37-62 us`, but it is still small relative to search and not the first frontier to attack.
+- body read, JSON parse, and vectorization are already close to noise relative to the search path
+- response write is visible but still small
+- search remains the dominant service-side cost
+- service-side p99 is now about `0.64-0.68 ms`
+- the external full-stack p99 at about `1.10 ms` means LB/network-visible overhead is now material
+- memory pressure is still not the current limiter
 
 ## Immediate implication
 
 The next optimization passes should prioritize:
 
-1. reducing scanned candidates per request
-2. improving the top-candidate maintenance cost inside the search kernel
-3. testing whether a more selective index topology or search algorithm can keep recall while cutting tail scan cost
-4. only then revisiting LB/API transport overhead
+1. reducing the remaining search tail without giving back correctness
+2. measuring LB/runtime overhead directly against the current best search point
+3. only spending more memory if it buys a measurable gain under the actual compose limits

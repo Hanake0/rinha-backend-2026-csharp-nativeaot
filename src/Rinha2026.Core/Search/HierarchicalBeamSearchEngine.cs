@@ -6,12 +6,15 @@ public sealed class HierarchicalBeamSearchEngine {
 	private const float CrossHistoryLowerBoundSquaredL2 = 2f;
 
 	private readonly HierarchicalArtifactSet artifactSet;
+	private readonly bool useLeafRadiusPruning;
 	private readonly bool useLastTransactionPartitionPruning;
 
 	public HierarchicalBeamSearchEngine(
 		HierarchicalArtifactSet artifactSet,
-		bool useLastTransactionPartitionPruning = true) {
+		bool useLastTransactionPartitionPruning = true,
+		bool useLeafRadiusPruning = false) {
 		this.artifactSet = artifactSet ?? throw new ArgumentNullException(nameof(artifactSet));
+		this.useLeafRadiusPruning = useLeafRadiusPruning;
 		this.useLastTransactionPartitionPruning = useLastTransactionPartitionPruning;
 	}
 
@@ -65,6 +68,7 @@ public sealed class HierarchicalBeamSearchEngine {
 		Span<sbyte> quantizedQuery = stackalloc sbyte[flatArtifacts.PaddedDimension];
 		int candidateMaxIndex = 0;
 		int candidateMaxDistance = int.MinValue;
+		float candidateMaxDistanceNorm = 0f;
 
 		VectorEncoding.EncodeQ8Symmetric(query[..flatArtifacts.PaddedDimension], quantizedQuery);
 
@@ -81,8 +85,11 @@ public sealed class HierarchicalBeamSearchEngine {
 				ref candidateCount,
 				ref candidateMaxIndex,
 				ref candidateMaxDistance,
+				ref candidateMaxDistanceNorm,
 				CandidatePartitionSelection.All,
 				queryWithoutHistory: false,
+				out _,
+				out _,
 				out _,
 				out _,
 				out _);
@@ -99,8 +106,11 @@ public sealed class HierarchicalBeamSearchEngine {
 			ref candidateCountWithSamePartition,
 			ref candidateMaxIndex,
 			ref candidateMaxDistance,
+			ref candidateMaxDistanceNorm,
 			CandidatePartitionSelection.SamePartitionOnly,
 			queryWithoutHistory,
+			out _,
+			out _,
 			out _,
 			out _,
 			out _);
@@ -120,8 +130,11 @@ public sealed class HierarchicalBeamSearchEngine {
 			ref mergedCandidateCount,
 			ref candidateMaxIndex,
 			ref candidateMaxDistance,
+			ref candidateMaxDistanceNorm,
 			CandidatePartitionSelection.OppositePartitionOnly,
 			queryWithoutHistory,
+			out _,
+			out _,
 			out _,
 			out _,
 			out _);
@@ -157,6 +170,7 @@ public sealed class HierarchicalBeamSearchEngine {
 		Span<SearchHit> rerankHits = topK <= 16 ? stackalloc SearchHit[topK] : new SearchHit[topK];
 		int candidateMaxIndex = 0;
 		int candidateMaxDistance = int.MinValue;
+		float candidateMaxDistanceNorm = 0f;
 
 		VectorEncoding.EncodeQ8Symmetric(query[..flatArtifacts.PaddedDimension], quantizedQuery);
 
@@ -173,11 +187,14 @@ public sealed class HierarchicalBeamSearchEngine {
 				ref candidateCount,
 				ref candidateMaxIndex,
 				ref candidateMaxDistance,
+				ref candidateMaxDistanceNorm,
 				CandidatePartitionSelection.All,
 				queryWithoutHistory: false,
 				out int scannedCandidateCount,
 				out int branchMaxSelectedLeafSize,
-				out int branchMinSelectedLeafSize);
+				out int branchMinSelectedLeafSize,
+				out int prunedLeafCount,
+				out int prunedCandidateCount);
 			return new HierarchicalSearchTrace(
 				parentCount,
 				leafCount,
@@ -185,6 +202,8 @@ public sealed class HierarchicalBeamSearchEngine {
 				candidateCount,
 				branchMaxSelectedLeafSize,
 				branchMinSelectedLeafSize,
+				prunedLeafCount,
+				prunedCandidateCount,
 				SecondaryCandidateScanCount: 0);
 		}
 
@@ -198,11 +217,14 @@ public sealed class HierarchicalBeamSearchEngine {
 			ref candidateCountWithSamePartition,
 			ref candidateMaxIndex,
 			ref candidateMaxDistance,
+			ref candidateMaxDistanceNorm,
 			CandidatePartitionSelection.SamePartitionOnly,
 			queryWithoutHistory,
 			out int primaryScanCount,
 			out int maxSelectedLeafSize,
-			out int minSelectedLeafSize);
+			out int minSelectedLeafSize,
+			out int primaryPrunedLeafCount,
+			out int primaryPrunedCandidateCount);
 		int provisionalCount = this.RerankCandidates(query, candidateIds[..candidateCountWithSamePartition], rerankHits);
 
 		if ((provisionalCount == rerankHits.Length) &&
@@ -214,6 +236,8 @@ public sealed class HierarchicalBeamSearchEngine {
 				candidateCountWithSamePartition,
 				maxSelectedLeafSize,
 				minSelectedLeafSize,
+				primaryPrunedLeafCount,
+				primaryPrunedCandidateCount,
 				SecondaryCandidateScanCount: 0);
 		}
 
@@ -226,11 +250,14 @@ public sealed class HierarchicalBeamSearchEngine {
 			ref mergedCandidateCount,
 			ref candidateMaxIndex,
 			ref candidateMaxDistance,
+			ref candidateMaxDistanceNorm,
 			CandidatePartitionSelection.OppositePartitionOnly,
 			queryWithoutHistory,
 			out int secondaryScanCount,
 			out _,
-			out _);
+			out _,
+			out int secondaryPrunedLeafCount,
+			out int secondaryPrunedCandidateCount);
 		return new HierarchicalSearchTrace(
 			parentCount,
 			leafCount,
@@ -238,6 +265,8 @@ public sealed class HierarchicalBeamSearchEngine {
 			mergedCandidateCount,
 			maxSelectedLeafSize,
 			minSelectedLeafSize,
+			primaryPrunedLeafCount + secondaryPrunedLeafCount,
+			primaryPrunedCandidateCount + secondaryPrunedCandidateCount,
 			secondaryScanCount);
 	}
 
@@ -289,21 +318,33 @@ public sealed class HierarchicalBeamSearchEngine {
 		ref int count,
 		ref int currentMaxIndex,
 		ref int currentMaxDistance,
+		ref float currentMaxDistanceNorm,
 		CandidatePartitionSelection partitionSelection,
 		bool queryWithoutHistory,
 		out int scannedCandidateCount,
 		out int maxSelectedLeafSize,
-		out int minSelectedLeafSize) {
+		out int minSelectedLeafSize,
+		out int prunedLeafCount,
+		out int prunedCandidateCount) {
 		ReadOnlySpan<int> postingOffsets = this.artifactSet.GetLeafPostingOffsets();
 		ReadOnlySpan<byte> quantizedVectors = this.artifactSet.FlatArtifacts.GetQuantizedVectors();
 		ReadOnlySpan<int> leafWithoutHistoryCounts = this.artifactSet.HasLastTransactionPartitioning
 			? this.artifactSet.GetLeafWithoutHistoryCounts()
 			: ReadOnlySpan<int>.Empty;
+		bool enableLeafRadiusPruning = this.ShouldUseLeafRadiusPruning();
+		ReadOnlySpan<sbyte> quantizedLeafCentroids = enableLeafRadiusPruning
+			? this.artifactSet.GetQuantizedLeafCentroids()
+			: ReadOnlySpan<sbyte>.Empty;
+		ReadOnlySpan<float> leafRadiusBounds = enableLeafRadiusPruning
+			? this.artifactSet.GetLeafRadiusBounds()
+			: ReadOnlySpan<float>.Empty;
 		int paddedDimension = this.artifactSet.FlatArtifacts.PaddedDimension;
 		int leafCount = 0;
 		scannedCandidateCount = 0;
 		maxSelectedLeafSize = 0;
 		minSelectedLeafSize = int.MaxValue;
+		prunedLeafCount = 0;
+		prunedCandidateCount = 0;
 
 		for (int leafIndex = 0; leafIndex < selectedLeaves.Length; leafIndex++) {
 			int leafId = selectedLeaves[leafIndex];
@@ -332,6 +373,22 @@ public sealed class HierarchicalBeamSearchEngine {
 				continue;
 			}
 
+			if (enableLeafRadiusPruning &&
+				ShouldPruneLeaf(
+					query,
+					quantizedLeafCentroids,
+					leafRadiusBounds,
+					paddedDimension,
+					leafId,
+					destinationIds.Length,
+					count,
+					currentMaxDistance,
+					currentMaxDistanceNorm)) {
+				prunedLeafCount++;
+				prunedCandidateCount += leafSize;
+				continue;
+			}
+
 			scannedCandidateCount += leafSize;
 			maxSelectedLeafSize = Math.Max(maxSelectedLeafSize, leafSize);
 			minSelectedLeafSize = Math.Min(minSelectedLeafSize, leafSize);
@@ -348,7 +405,8 @@ public sealed class HierarchicalBeamSearchEngine {
 					destinationDistances,
 					ref count,
 					ref currentMaxIndex,
-					ref currentMaxDistance);
+					ref currentMaxDistance,
+					ref currentMaxDistanceNorm);
 			} else {
 				ScanExplicitPostingLeaf(
 					query,
@@ -361,7 +419,8 @@ public sealed class HierarchicalBeamSearchEngine {
 					destinationDistances,
 					ref count,
 					ref currentMaxIndex,
-					ref currentMaxDistance);
+					ref currentMaxDistance,
+					ref currentMaxDistanceNorm);
 			}
 		}
 
@@ -394,6 +453,9 @@ public sealed class HierarchicalBeamSearchEngine {
 
 	private bool ShouldUseLastTransactionPartitionPruning() =>
 		this.useLastTransactionPartitionPruning && this.artifactSet.HasLastTransactionPartitioning;
+
+	private bool ShouldUseLeafRadiusPruning() =>
+		this.useLeafRadiusPruning && this.artifactSet.HasLeafRadiusBounds;
 
 	private static bool IsWithoutHistoryQuery(ReadOnlySpan<float> query) => (query[5] < 0f) && (query[6] < 0f);
 
@@ -459,7 +521,8 @@ public sealed class HierarchicalBeamSearchEngine {
 		Span<int> destinationDistances,
 		ref int count,
 		ref int currentMaxIndex,
-		ref int currentMaxDistance) {
+		ref int currentMaxDistance,
+		ref float currentMaxDistanceNorm) {
 		for (int postingIndex = start; postingIndex < end; postingIndex++) {
 			int vectorId = postingIds[postingIndex];
 			int vectorOffset = checked(vectorId * paddedDimension);
@@ -472,6 +535,7 @@ public sealed class HierarchicalBeamSearchEngine {
 				ref count,
 				ref currentMaxIndex,
 				ref currentMaxDistance,
+				ref currentMaxDistanceNorm,
 				vectorId,
 				distance);
 		}
@@ -487,7 +551,8 @@ public sealed class HierarchicalBeamSearchEngine {
 		Span<int> destinationDistances,
 		ref int count,
 		ref int currentMaxIndex,
-		ref int currentMaxDistance) {
+		ref int currentMaxDistance,
+		ref float currentMaxDistanceNorm) {
 		int vectorOffset = checked(start * paddedDimension);
 
 		for (int vectorId = start; vectorId < end; vectorId++) {
@@ -500,6 +565,7 @@ public sealed class HierarchicalBeamSearchEngine {
 				ref count,
 				ref currentMaxIndex,
 				ref currentMaxDistance,
+				ref currentMaxDistanceNorm,
 				vectorId,
 				distance);
 			vectorOffset += paddedDimension;
@@ -512,6 +578,7 @@ public sealed class HierarchicalBeamSearchEngine {
 		ref int count,
 		ref int currentMaxIndex,
 		ref int currentMaxDistance,
+		ref float currentMaxDistanceNorm,
 		int id,
 		int distance) {
 		if (count < destinationIds.Length) {
@@ -521,6 +588,7 @@ public sealed class HierarchicalBeamSearchEngine {
 			if ((count == 0) || (distance > currentMaxDistance)) {
 				currentMaxDistance = distance;
 				currentMaxIndex = count;
+				currentMaxDistanceNorm = MathF.Sqrt(distance);
 			}
 
 			count++;
@@ -534,6 +602,7 @@ public sealed class HierarchicalBeamSearchEngine {
 		destinationIds[currentMaxIndex] = id;
 		destinationDistances[currentMaxIndex] = distance;
 		(currentMaxIndex, currentMaxDistance) = FindMaxCandidate(destinationDistances, count);
+		currentMaxDistanceNorm = MathF.Sqrt(currentMaxDistance);
 	}
 
 	private static (int Index, int Distance) FindMaxCandidate(ReadOnlySpan<int> distances, int count) {
@@ -548,6 +617,29 @@ public sealed class HierarchicalBeamSearchEngine {
 		}
 
 		return (maxIndex, maxDistance);
+	}
+
+	private static bool ShouldPruneLeaf(
+		ReadOnlySpan<sbyte> query,
+		ReadOnlySpan<sbyte> quantizedLeafCentroids,
+		ReadOnlySpan<float> leafRadiusBounds,
+		int paddedDimension,
+		int leafId,
+		int candidateCapacity,
+		int count,
+		int currentMaxDistance,
+		float currentMaxDistanceNorm) {
+		if ((count < candidateCapacity) || (currentMaxDistance < 0)) {
+			return false;
+		}
+
+		int centroidOffset = checked(leafId * paddedDimension);
+		int centroidDistance = DistanceComputations.SquaredL2Q8(
+			query,
+			quantizedLeafCentroids.Slice(centroidOffset, paddedDimension));
+		float radius = leafRadiusBounds[leafId];
+		float threshold = currentMaxDistance + (2f * radius * currentMaxDistanceNorm) + (radius * radius);
+		return centroidDistance > threshold;
 	}
 
 	private enum CandidatePartitionSelection {

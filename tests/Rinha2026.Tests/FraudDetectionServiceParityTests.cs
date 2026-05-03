@@ -84,6 +84,7 @@ public sealed class FraudDetectionServiceParityTests {
 				IndexKind: IndexKind.HierarchicalBeamIvf,
 				PaddedDimension: 16,
 				RerankCount: 68,
+				UseLeafRadiusPruning: false,
 				UseLastTransactionPartitionPruning: true),
 			new RuntimeHttpConfig(
 				ParserMode: parserMode,

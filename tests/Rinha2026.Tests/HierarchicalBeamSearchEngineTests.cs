@@ -78,6 +78,54 @@ public sealed class HierarchicalBeamSearchEngineTests {
 	}
 
 	[Fact]
+	public async Task LeafRadiusPruningSkipsDistantLeavesWithoutChangingTopHits() {
+		IndexBuildOptions buildOptions = new() {
+			InputPath = string.Empty,
+			KMeansIterations = 4,
+			Level1ClusterCount = 1,
+			Level2ClustersPerLevel1 = 2,
+			OutputDirectory = string.Empty,
+			TrainingSampleSize = 8,
+		};
+
+		using TemporaryArtifactCorpus corpus = await TemporaryArtifactCorpus.CreateAsync(
+			buildOptions,
+			(CreateVector(0.10f, 0.10f, 0.10f), "legit"),
+			(CreateVector(0.11f, 0.11f, 0.11f), "fraud"),
+			(CreateVector(0.12f, 0.12f, 0.12f), "legit"),
+			(CreateVector(0.13f, 0.13f, 0.13f), "fraud"),
+			(CreateVector(0.84f, 0.84f, 0.84f), "legit"),
+			(CreateVector(0.86f, 0.86f, 0.86f), "fraud"),
+			(CreateVector(0.88f, 0.88f, 0.88f), "legit"),
+			(CreateVector(0.90f, 0.90f, 0.90f), "fraud"));
+
+		using HierarchicalArtifactSet hierarchicalArtifacts = HierarchicalArtifactSet.Load(corpus.IndexDirectory);
+		HierarchicalBeamSearchEngine baselineEngine = new(
+			hierarchicalArtifacts,
+			useLastTransactionPartitionPruning: false,
+			useLeafRadiusPruning: false);
+		HierarchicalBeamSearchEngine prunedEngine = new(
+			hierarchicalArtifacts,
+			useLastTransactionPartitionPruning: false,
+			useLeafRadiusPruning: true);
+		float[] query = CreateQuery(0.115f, 0.115f, 0.115f);
+		SearchHit[] baselineHits = new SearchHit[2];
+		SearchHit[] prunedHits = new SearchHit[2];
+
+		int baselineCount = baselineEngine.Search(query, beamLevel1: 1, beamLevel2: 2, rerankCount: 2, baselineHits);
+		int prunedCount = prunedEngine.Search(query, beamLevel1: 1, beamLevel2: 2, rerankCount: 2, prunedHits);
+		HierarchicalSearchTrace baselineTrace = baselineEngine.Trace(query, beamLevel1: 1, beamLevel2: 2, rerankCount: 2, topK: 2);
+		HierarchicalSearchTrace prunedTrace = prunedEngine.Trace(query, beamLevel1: 1, beamLevel2: 2, rerankCount: 2, topK: 2);
+
+		Assert.Equal(baselineCount, prunedCount);
+		Assert.Equal(
+			baselineHits.Take(baselineCount).Select(static hit => hit.Index),
+			prunedHits.Take(prunedCount).Select(static hit => hit.Index));
+		Assert.True(prunedTrace.PrunedLeafCount > 0);
+		Assert.True(prunedTrace.CandidateScanCount < baselineTrace.CandidateScanCount);
+	}
+
+	[Fact]
 	public async Task HistoryPartitionPruningSkipsOppositePartitionWhenSamePartitionAlreadyFillsTopK() {
 		IndexBuildOptions buildOptions = new() {
 			InputPath = string.Empty,

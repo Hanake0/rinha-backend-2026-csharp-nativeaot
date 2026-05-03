@@ -26,6 +26,7 @@ RuntimeConfig runtimeConfig = new(
 		options.IndexKind,
 		PaddedDimension: 16,
 		options.RerankCount,
+		options.UseLeafRadiusPruning,
 		options.UseLastTransactionPartitionPruning),
 	new RuntimeHttpConfig(
 		GetRuntimeParserMode(options.ParseMode),
@@ -59,6 +60,8 @@ List<int>? traceCandidateScanCounts = options.TraceEvery > 0 ? new List<int>() :
 List<int>? traceCandidateRerankCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<int>? traceSelectedLeafCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<int>? traceMaxLeafSizes = options.TraceEvery > 0 ? new List<int>() : null;
+List<int>? tracePrunedLeafCounts = options.TraceEvery > 0 ? new List<int>() : null;
+List<int>? tracePrunedCandidateCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<int>? traceSecondaryScanCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<EvaluatorMismatch> mismatches = [];
 SearchHit[] hits = new SearchHit[options.TopK];
@@ -120,6 +123,8 @@ foreach (JsonElement entry in entries) {
 			traceCandidateRerankCounts!.Add(trace.CandidateRerankCount);
 			traceSelectedLeafCounts!.Add(trace.SelectedLeafCount);
 			traceMaxLeafSizes!.Add(trace.MaxSelectedLeafSize);
+			tracePrunedLeafCounts!.Add(trace.PrunedLeafCount);
+			tracePrunedCandidateCounts!.Add(trace.PrunedCandidateCount);
 			traceSecondaryScanCounts!.Add(trace.SecondaryCandidateScanCount);
 		}
 
@@ -165,6 +170,7 @@ EvaluatorSummary summary = new(
 	options.RerankCount,
 	options.TopK,
 	options.ApprovalThreshold,
+	options.UseLeafRadiusPruning,
 	options.UseLastTransactionPartitionPruning,
 	options.StartIndex,
 	options.TraceEvery,
@@ -195,6 +201,8 @@ EvaluatorSummary summary = new(
 		traceCandidateRerankCounts,
 		traceSelectedLeafCounts,
 		traceMaxLeafSizes,
+		tracePrunedLeafCounts,
+		tracePrunedCandidateCounts,
 		traceSecondaryScanCounts));
 
 Console.WriteLine(JsonSerializer.Serialize(
@@ -255,11 +263,15 @@ static TraceSummary? BuildTraceSummary(
 	List<int>? candidateRerankCounts,
 	List<int>? selectedLeafCounts,
 	List<int>? maxLeafSizes,
+	List<int>? prunedLeafCounts,
+	List<int>? prunedCandidateCounts,
 	List<int>? secondaryScanCounts) {
 	if ((candidateScanCounts is null) ||
 		(candidateRerankCounts is null) ||
 		(selectedLeafCounts is null) ||
 		(maxLeafSizes is null) ||
+		(prunedLeafCounts is null) ||
+		(prunedCandidateCounts is null) ||
 		(secondaryScanCounts is null) ||
 		(candidateScanCounts.Count == 0)) {
 		return null;
@@ -271,6 +283,8 @@ static TraceSummary? BuildTraceSummary(
 		BuildIntMetricSummary(candidateRerankCounts),
 		BuildIntMetricSummary(selectedLeafCounts),
 		BuildIntMetricSummary(maxLeafSizes),
+		BuildIntMetricSummary(prunedLeafCounts),
+		BuildIntMetricSummary(prunedCandidateCounts),
 		BuildIntMetricSummary(secondaryScanCounts));
 }
 
@@ -457,6 +471,7 @@ internal sealed record EvaluatorSettings(
 	int RerankCount,
 	int TopK,
 	double ApprovalThreshold,
+	bool UseLeafRadiusPruning,
 	bool UseLastTransactionPartitionPruning,
 	int StartIndex,
 	int TraceEvery,
@@ -514,6 +529,8 @@ internal sealed record TraceSummary(
 	IntMetricSummary CandidateRerankCount,
 	IntMetricSummary SelectedLeafCount,
 	IntMetricSummary MaxSelectedLeafSize,
+	IntMetricSummary PrunedLeafCount,
+	IntMetricSummary PrunedCandidateCount,
 	IntMetricSummary SecondaryCandidateScanCount);
 
 internal sealed record IntMetricSummary(
@@ -539,6 +556,7 @@ internal sealed class EvaluatorOptions {
 		int limit,
 		int traceEvery,
 		int mismatchLimit,
+		bool useLeafRadiusPruning,
 		bool useLastTransactionPartitionPruning) {
 		this.TestDataPath = testDataPath;
 		this.RuntimeDataRoot = runtimeDataRoot;
@@ -553,6 +571,7 @@ internal sealed class EvaluatorOptions {
 		this.Limit = limit;
 		this.TraceEvery = traceEvery;
 		this.MismatchLimit = mismatchLimit;
+		this.UseLeafRadiusPruning = useLeafRadiusPruning;
 		this.UseLastTransactionPartitionPruning = useLastTransactionPartitionPruning;
 	}
 
@@ -581,6 +600,8 @@ internal sealed class EvaluatorOptions {
 	public int StartIndex { get; }
 
 	public int TraceEvery { get; }
+
+	public bool UseLeafRadiusPruning { get; }
 
 	public bool UseLastTransactionPartitionPruning { get; }
 
@@ -612,6 +633,7 @@ internal sealed class EvaluatorOptions {
 			int.Parse(GetValue(values, "--limit", "0"), System.Globalization.CultureInfo.InvariantCulture),
 			int.Parse(GetValue(values, "--trace-every", "0"), System.Globalization.CultureInfo.InvariantCulture),
 			int.Parse(GetValue(values, "--mismatch-limit", "32"), System.Globalization.CultureInfo.InvariantCulture),
+			bool.Parse(GetValue(values, "--use-leaf-radius-pruning", "false")),
 			bool.Parse(GetValue(values, "--use-last-transaction-partition-pruning", "true")));
 	}
 

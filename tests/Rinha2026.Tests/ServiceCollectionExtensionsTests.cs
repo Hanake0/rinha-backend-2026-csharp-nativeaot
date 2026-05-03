@@ -22,6 +22,7 @@ public sealed class ServiceCollectionExtensionsTests {
 			["Runtime:Search:IndexKind"] = "HierarchicalBeamIvf",
 			["Runtime:Search:PaddedDimension"] = "16",
 			["Runtime:Search:RerankCount"] = "68",
+			["Runtime:Search:UseLeafRadiusPruning"] = "true",
 			["Runtime:Search:UseLastTransactionPartitionPruning"] = "false",
 			["Runtime:Http:ParserMode"] = "ReferenceStj",
 			["Runtime:Http:ResponseMode"] = "PrecomputedTable",
@@ -46,6 +47,7 @@ public sealed class ServiceCollectionExtensionsTests {
 		Assert.Equal(10, runtimeConfig.Search.BeamLevel1);
 		Assert.Equal(17, runtimeConfig.Search.BeamLevel2);
 		Assert.Equal(68, runtimeConfig.Search.RerankCount);
+		Assert.True(runtimeConfig.Search.UseLeafRadiusPruning);
 		Assert.False(runtimeConfig.Search.UseLastTransactionPartitionPruning);
 		Assert.Equal(ParserMode.ReferenceStj, runtimeConfig.Http.ParserMode);
 		Assert.True(runtimeConfig.Diagnostics.ProfileEnabled);

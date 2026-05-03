@@ -8,6 +8,7 @@ param(
 	[string]$IndexKind = "HierarchicalBeamIvf",
 	[int]$TopK = 5,
 	[double]$ApprovalThreshold = 0.6,
+	[bool]$UseLeafRadiusPruning = $false,
 	[bool]$UseLastTransactionPartitionPruning = $true,
 	[string]$OutputCsv = "",
 	[int]$TraceEvery = 0
@@ -57,6 +58,7 @@ foreach ($runtimeDataDir in $RuntimeDataDirs) {
 					--rerank-count $rerankCount `
 					--top-k $TopK `
 					--approval-threshold $ApprovalThreshold `
+					--use-leaf-radius-pruning $UseLeafRadiusPruning `
 					--use-last-transaction-partition-pruning $UseLastTransactionPartitionPruning `
 					--trace-every $TraceEvery
 
@@ -92,6 +94,14 @@ foreach ($runtimeDataDir in $RuntimeDataDirs) {
 						trace_max_leaf_size_p95 = if ($trace) { [int]$trace.MaxSelectedLeafSize.P95 } else { 0 }
 						trace_max_leaf_size_p99 = if ($trace) { [int]$trace.MaxSelectedLeafSize.P99 } else { 0 }
 						trace_max_leaf_size_mean = if ($trace) { [int]$trace.MaxSelectedLeafSize.Mean } else { 0 }
+						trace_pruned_leaf_p50 = if ($trace) { [int]$trace.PrunedLeafCount.P50 } else { 0 }
+						trace_pruned_leaf_p95 = if ($trace) { [int]$trace.PrunedLeafCount.P95 } else { 0 }
+						trace_pruned_leaf_p99 = if ($trace) { [int]$trace.PrunedLeafCount.P99 } else { 0 }
+						trace_pruned_leaf_mean = if ($trace) { [int]$trace.PrunedLeafCount.Mean } else { 0 }
+						trace_pruned_candidate_p50 = if ($trace) { [int]$trace.PrunedCandidateCount.P50 } else { 0 }
+						trace_pruned_candidate_p95 = if ($trace) { [int]$trace.PrunedCandidateCount.P95 } else { 0 }
+						trace_pruned_candidate_p99 = if ($trace) { [int]$trace.PrunedCandidateCount.P99 } else { 0 }
+						trace_pruned_candidate_mean = if ($trace) { [int]$trace.PrunedCandidateCount.Mean } else { 0 }
 						trace_secondary_scan_p50 = if ($trace) { [int]$trace.SecondaryCandidateScanCount.P50 } else { 0 }
 						trace_secondary_scan_p95 = if ($trace) { [int]$trace.SecondaryCandidateScanCount.P95 } else { 0 }
 						trace_secondary_scan_p99 = if ($trace) { [int]$trace.SecondaryCandidateScanCount.P99 } else { 0 }

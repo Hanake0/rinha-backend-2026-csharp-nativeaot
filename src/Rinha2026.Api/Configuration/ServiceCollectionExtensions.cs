@@ -109,6 +109,10 @@ public static class ServiceCollectionExtensions {
 					configuration,
 					"Runtime:Search:RerankCount",
 					defaults.Search.RerankCount),
+				UseLeafRadiusPruning = GetBoolean(
+					configuration,
+					"Runtime:Search:UseLeafRadiusPruning",
+					defaults.Search.UseLeafRadiusPruning),
 				UseLastTransactionPartitionPruning = GetBoolean(
 					configuration,
 					"Runtime:Search:UseLastTransactionPartitionPruning",

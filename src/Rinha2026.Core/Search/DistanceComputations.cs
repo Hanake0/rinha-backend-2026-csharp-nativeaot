@@ -60,7 +60,10 @@ public static class DistanceComputations {
 
 	public static int SquaredL2Q8(ReadOnlySpan<sbyte> query, ReadOnlySpan<byte> encodedVector) {
 		ReadOnlySpan<sbyte> vector = MemoryMarshal.Cast<byte, sbyte>(encodedVector);
+		return SquaredL2Q8(query, vector);
+	}
 
+	public static int SquaredL2Q8(ReadOnlySpan<sbyte> query, ReadOnlySpan<sbyte> vector) {
 		if (Avx2.IsSupported && (vector.Length == 16) && (query.Length >= 16)) {
 			return SquaredL2Q8Vectorized(query, vector);
 		}
