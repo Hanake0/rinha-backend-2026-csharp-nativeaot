@@ -1,0 +1,95 @@
+services:
+  lb:
+    build:
+      context: .
+      dockerfile: Dockerfile.lb
+    container_name: rinha2026-lb
+    environment:
+      ASPNETCORE_URLS: http://+:9999
+      BACKEND_ENDPOINTS: api1:9999;api2:9999
+    ports:
+      - "9999:9999"
+    depends_on:
+      - api1
+      - api2
+    cpus: ${LB_CPUS:-0.15}
+    mem_limit: ${LB_MEM_LIMIT:-48m}
+    deploy:
+      resources:
+        limits:
+          cpus: "${LB_CPUS:-0.15}"
+          memory: ${LB_MEM_LIMIT_DEPLOY:-48M}
+
+  api1:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: rinha2026-api1
+    environment:
+      ASPNETCORE_URLS: http://+:9999
+      DOTNET_PROCESSOR_COUNT: ${DOTNET_PROCESSOR_COUNT:-}
+      DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS: ${DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS:-}
+      DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT: ${DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT:-}
+      Runtime__Detection__ApprovalThreshold: ${APPROVAL_THRESHOLD:-0.6}
+      Runtime__Detection__TopK: ${TOP_K:-5}
+      Runtime__Dataset__IndexDirectory: ${RUNTIME_INDEX_DIRECTORY:-/app/data/index}
+      Runtime__Dataset__MccRiskPath: ${RUNTIME_MCC_RISK_PATH:-/app/data/mcc_risk.json}
+      Runtime__Dataset__NormalizationPath: ${RUNTIME_NORMALIZATION_PATH:-/app/data/normalization.json}
+      Runtime__Http__IoQueueCount: ${HTTP_IO_QUEUE_COUNT:-}
+      Runtime__Http__NoDelay: ${HTTP_NO_DELAY:-}
+      Runtime__Http__ParserMode: ${HTTP_PARSER_MODE:-Manual}
+      Runtime__Http__ServerMode: ${HTTP_SERVER_MODE:-Kestrel}
+      Runtime__Http__UnsafePreferInlineScheduling: ${HTTP_INLINE_SCHEDULING:-}
+      Runtime__Search__BeamLevel1: ${SEARCH_BEAM_LEVEL1:-8}
+      Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-128}
+      Runtime__Search__IndexKind: ${SEARCH_INDEX_KIND:-HierarchicalBeamIvf}
+      Runtime__Search__RerankCount: ${SEARCH_RERANK_COUNT:-48}
+      Runtime__Search__BoundaryRerankCount: ${SEARCH_BOUNDARY_RERANK_COUNT:-48}
+      Runtime__Search__UseLeafRadiusPruning: ${SEARCH_USE_LEAF_RADIUS_PRUNING:-true}
+      Runtime__Search__UseLastTransactionPartitionPruning: ${SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING:-true}
+    volumes:
+      - ${RUNTIME_DATA_DIR:-./runtime-data}:/app/data:ro
+    cpus: ${API_CPUS:-0.425}
+    mem_limit: ${API_MEM_LIMIT:-151m}
+    deploy:
+      resources:
+        limits:
+          cpus: "${API_CPUS:-0.425}"
+          memory: ${API_MEM_LIMIT_DEPLOY:-151M}
+
+  api2:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: rinha2026-api2
+    environment:
+      ASPNETCORE_URLS: http://+:9999
+      DOTNET_PROCESSOR_COUNT: ${DOTNET_PROCESSOR_COUNT:-}
+      DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS: ${DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS:-}
+      DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT: ${DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT:-}
+      Runtime__Detection__ApprovalThreshold: ${APPROVAL_THRESHOLD:-0.6}
+      Runtime__Detection__TopK: ${TOP_K:-5}
+      Runtime__Dataset__IndexDirectory: ${RUNTIME_INDEX_DIRECTORY:-/app/data/index}
+      Runtime__Dataset__MccRiskPath: ${RUNTIME_MCC_RISK_PATH:-/app/data/mcc_risk.json}
+      Runtime__Dataset__NormalizationPath: ${RUNTIME_NORMALIZATION_PATH:-/app/data/normalization.json}
+      Runtime__Http__IoQueueCount: ${HTTP_IO_QUEUE_COUNT:-}
+      Runtime__Http__NoDelay: ${HTTP_NO_DELAY:-}
+      Runtime__Http__ParserMode: ${HTTP_PARSER_MODE:-Manual}
+      Runtime__Http__ServerMode: ${HTTP_SERVER_MODE:-Kestrel}
+      Runtime__Http__UnsafePreferInlineScheduling: ${HTTP_INLINE_SCHEDULING:-}
+      Runtime__Search__BeamLevel1: ${SEARCH_BEAM_LEVEL1:-8}
+      Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-128}
+      Runtime__Search__IndexKind: ${SEARCH_INDEX_KIND:-HierarchicalBeamIvf}
+      Runtime__Search__RerankCount: ${SEARCH_RERANK_COUNT:-48}
+      Runtime__Search__BoundaryRerankCount: ${SEARCH_BOUNDARY_RERANK_COUNT:-48}
+      Runtime__Search__UseLeafRadiusPruning: ${SEARCH_USE_LEAF_RADIUS_PRUNING:-true}
+      Runtime__Search__UseLastTransactionPartitionPruning: ${SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING:-true}
+    volumes:
+      - ${RUNTIME_DATA_DIR:-./runtime-data}:/app/data:ro
+    cpus: ${API_CPUS:-0.425}
+    mem_limit: ${API_MEM_LIMIT:-151m}
+    deploy:
+      resources:
+        limits:
+          cpus: "${API_CPUS:-0.425}"
+          memory: ${API_MEM_LIMIT_DEPLOY:-151M}
