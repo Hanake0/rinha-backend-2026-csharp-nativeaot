@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Rinha2026.Core\Rinha2026.Core.csproj" />
+    <ProjectReference Include="..\..\src\Rinha2026.IndexBuilder\Rinha2026.IndexBuilder.csproj" />
   </ItemGroup>
 
   <ItemGroup>
