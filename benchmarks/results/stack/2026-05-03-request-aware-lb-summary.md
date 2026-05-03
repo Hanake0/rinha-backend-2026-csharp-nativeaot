@@ -18,6 +18,11 @@ This pass changes two things relative to the earlier rejected native LB branch:
 
 The LB keeps backend connections open and forwards whole HTTP/1.1 requests and responses at request granularity.
 
+Follow-up optimization in this same branch:
+
+- backend connections are now pooled across clients instead of being kept per client/backend pair
+- pool size and prewarm count are configurable via `LB_BACKEND_POOL_SIZE` and `LB_BACKEND_PREWARM_CONNECTIONS`
+
 ## Fast-screen harness
 
 New helper:
@@ -57,22 +62,31 @@ Dataset and runtime settings:
 ### Request-aware LB over TCP backends
 
 - compose: `docker-compose.native-lb.yml`
-- short result: `p99 = 226.98 ms`
+- first request-aware result: `p99 = 226.98 ms`
+- pooled-backend follow-up: `p99 = 108.82 ms`
 - detections: `0 / 0`
 
 ### Request-aware LB over UDS backends
 
 - compose: `docker-compose.native-lb-uds.yml`
-- wrapper validation is currently blocked by a startup/readiness bug
-- during validation, the API socket files were not present and the stack did not pass `GET /ready`
-- keep the earlier low-rate smoke as directional only until the startup path is fixed
+- clean sequential validation succeeded
+- first request-aware result: `p99 = 104.81 ms`
+- pooled-backend follow-up: `p99 = 105.79 ms`
+- pooled UDS sweep:
+  - `pool = 4`: `277.53 ms`
+  - `pool = 8`: `250.66 ms`
+  - `pool = 16`: `181.18 ms`
+  - `pool = 32`: `108.09 ms`
+  - `pool = 64`: best observed `86.51 ms`
+  - larger pool reruns (`80-192`) were noisy and did not beat that best observed point consistently
 
 ## Current reading
 
 - the quick-screen harness is good enough to reject obvious losers before a full `120s` run
 - the `900 req/s` quick harness is doing its job: obvious LB regressions now fail fast
-- the request-aware TCP LB is still drastically worse than nginx under the right short-screen load shape
-- the backend UDS branch needs a startup fix before it can be compared fairly at `900 req/s`
+- shared backend pooling materially reduced the custom TCP LB tail, so this branch was worth revisiting
+- backend UDS remains the better internal transport for this custom LB family, but it is still far behind nginx on the same quick screen
+- the best observed quick-screen point on this branch is still nowhere near the nginx quick baseline (`43.83 ms`)
 - this branch stays open only for deeper LB-path optimization or for reuse in later shared-search experiments
 
 ## Next justified steps

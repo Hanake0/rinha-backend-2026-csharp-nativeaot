@@ -163,8 +163,9 @@
 - request-aware custom LB revival:
   - replaced the earlier connection-level native proxy with per-request round-robin and persistent backend connections
   - the new `scripts/benchmark-quick-compose.ps1` harness now screens at `900 req/s` for `12s`, not at a low-rate ramp
-  - current quick-screen anchor: nginx baseline `43.83 ms`, request-aware custom LB over backend TCP `226.98 ms`, both exact at `0 / 0`
-  - backend UDS validation is temporarily blocked by a readiness/startup issue in `docker-compose.native-lb-uds.yml`; fix that before treating UDS results as comparable at the new short-screen pressure
+  - current quick-screen anchor: nginx baseline `43.83 ms`, first request-aware LB over backend TCP `226.98 ms`, first request-aware LB over backend UDS `104.81 ms`, all exact at `0 / 0`
+  - a follow-up pass pooled backend sockets across clients and improved the custom TCP branch to `108.82 ms`
+  - pooled UDS pool-size sweeps found a best observed short-screen point of `86.51 ms` around pool size `64`, but still far behind nginx
 
 ## Latest profiling anchors
 
