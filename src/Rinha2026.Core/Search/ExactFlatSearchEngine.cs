@@ -31,36 +31,49 @@ public sealed class ExactFlatSearchEngine {
 			throw new ArgumentException("Query vector does not match the padded index dimension.", nameof(query));
 		}
 
-		ReadOnlySpan<byte> rerankVectors = this.artifactSet.GetRerankVectors();
-		int vectorWidthInBytes = checked(this.artifactSet.PaddedDimension * sizeof(ushort));
 		int count = 0;
 
+		if (this.artifactSet.HasFullPrecisionRerankVectors) {
+			ReadOnlySpan<byte> rerankVectors = this.artifactSet.GetFullPrecisionRerankVectors();
+			int vectorWidthInBytes = checked(this.artifactSet.PaddedDimension * sizeof(float));
+
+			for (int vectorIndex = 0; vectorIndex < this.artifactSet.VectorCount; vectorIndex++) {
+				int vectorOffset = checked(vectorIndex * vectorWidthInBytes);
+				float distance = DistanceComputations.SquaredL2F32(
+					query,
+					rerankVectors.Slice(vectorOffset, vectorWidthInBytes));
+				bool isFraud = this.artifactSet.IsFraud(vectorIndex);
+				InsertSorted(destination, ref count, new SearchHit(vectorIndex, distance, isFraud), this.artifactSet);
+			}
+
+			return count;
+		}
+
+		ReadOnlySpan<byte> fallbackRerankVectors = this.artifactSet.GetRerankVectors();
+		int fallbackVectorWidthInBytes = checked(this.artifactSet.PaddedDimension * sizeof(ushort));
+
 		for (int vectorIndex = 0; vectorIndex < this.artifactSet.VectorCount; vectorIndex++) {
-			int vectorOffset = checked(vectorIndex * vectorWidthInBytes);
-			float distance = ComputeSquaredL2(
+			int vectorOffset = checked(vectorIndex * fallbackVectorWidthInBytes);
+			float distance = DistanceComputations.SquaredL2F16(
 				query,
-				rerankVectors.Slice(vectorOffset, vectorWidthInBytes));
+				fallbackRerankVectors.Slice(vectorOffset, fallbackVectorWidthInBytes));
 			bool isFraud = this.artifactSet.IsFraud(vectorIndex);
-			InsertSorted(destination, ref count, new SearchHit(vectorIndex, distance, isFraud));
+			InsertSorted(destination, ref count, new SearchHit(vectorIndex, distance, isFraud), this.artifactSet);
 		}
 
 		return count;
 	}
 
-	private static float ComputeSquaredL2(ReadOnlySpan<float> query, ReadOnlySpan<byte> encodedVector) {
-		return DistanceComputations.SquaredL2F16(query, encodedVector);
-	}
-
-	private static void InsertSorted(Span<SearchHit> destination, ref int count, SearchHit candidate) {
+	private static void InsertSorted(Span<SearchHit> destination, ref int count, SearchHit candidate, FlatArtifactSet artifactSet) {
 		int length = destination.Length;
 
-		if ((count == length) && (candidate.Distance >= destination[length - 1].Distance)) {
+		if ((count == length) && !ShouldInsertBefore(candidate, destination[length - 1], artifactSet)) {
 			return;
 		}
 
 		int insertAt = Math.Min(count, length - 1);
 
-		while ((insertAt > 0) && (candidate.Distance < destination[insertAt - 1].Distance)) {
+		while ((insertAt > 0) && ShouldInsertBefore(candidate, destination[insertAt - 1], artifactSet)) {
 			if (insertAt < length) {
 				destination[insertAt] = destination[insertAt - 1];
 			}
@@ -73,5 +86,17 @@ public sealed class ExactFlatSearchEngine {
 		if (count < length) {
 			count++;
 		}
+	}
+
+	private static bool ShouldInsertBefore(SearchHit candidate, SearchHit existing, FlatArtifactSet artifactSet) {
+		if (candidate.Distance < existing.Distance) {
+			return true;
+		}
+
+		if (candidate.Distance > existing.Distance) {
+			return false;
+		}
+
+		return artifactSet.GetStableOrderKey(candidate.Index) < artifactSet.GetStableOrderKey(existing.Index);
 	}
 }

@@ -111,6 +111,7 @@ internal static class HierarchicalIndexBuilder {
 			Level1CentroidFile = baseManifest.Level1CentroidFile,
 			Level1ClusterCount = level1ClusterCount,
 			Level2ClustersPerLevel1 = level2ClustersPerLevel1,
+			OriginalVectorIdFile = baseManifest.OriginalVectorIdFile,
 			PaddedDimension = baseManifest.PaddedDimension,
 			PostingLayout = "IdentityLeafOrder",
 			QuantizationMaxValue = baseManifest.QuantizationMaxValue,
@@ -118,6 +119,7 @@ internal static class HierarchicalIndexBuilder {
 			QuantizationKind = baseManifest.QuantizationKind,
 			QuantizationScale = baseManifest.QuantizationScale,
 			QuantizedVectorFile = baseManifest.QuantizedVectorFile,
+			FullPrecisionRerankVectorFile = baseManifest.FullPrecisionRerankVectorFile,
 			RerankVectorFile = baseManifest.RerankVectorFile,
 			TrainingSampleSize = trainingSampleSize,
 			VectorCount = baseManifest.VectorCount,
@@ -345,26 +347,63 @@ internal static class HierarchicalIndexBuilder {
 		ReadOnlySpan<int> orderedOriginalIds) {
 		string q8Path = Path.Combine(outputDirectory, manifest.QuantizedVectorFile);
 		string f16Path = Path.Combine(outputDirectory, manifest.RerankVectorFile);
+		string f32Path = string.IsNullOrWhiteSpace(manifest.FullPrecisionRerankVectorFile)
+			? string.Empty
+			: Path.Combine(outputDirectory, manifest.FullPrecisionRerankVectorFile);
+		string originalIdsPath = string.IsNullOrWhiteSpace(manifest.OriginalVectorIdFile)
+			? string.Empty
+			: Path.Combine(outputDirectory, manifest.OriginalVectorIdFile);
 		string labelPath = Path.Combine(outputDirectory, manifest.LabelBitsetFile);
 		string q8TempPath = q8Path + ".reordered";
 		string f16TempPath = f16Path + ".reordered";
+		string f32TempPath = string.IsNullOrWhiteSpace(f32Path) ? string.Empty : f32Path + ".reordered";
+		string originalIdsTempPath = string.IsNullOrWhiteSpace(originalIdsPath) ? string.Empty : originalIdsPath + ".reordered";
 		string labelTempPath = labelPath + ".reordered";
 		int q8Width = manifest.PaddedDimension;
 		int f16Width = checked(manifest.PaddedDimension * sizeof(ushort));
+		int f32Width = checked(manifest.PaddedDimension * sizeof(float));
 
 		using (MemoryMappedReadOnlyBuffer rerankVectors = MemoryMappedReadOnlyBuffer.OpenRead(f16Path))
+		using (MemoryMappedReadOnlyBuffer? fullPrecisionRerankVectors = string.IsNullOrWhiteSpace(f32Path)
+			? null
+			: MemoryMappedReadOnlyBuffer.OpenRead(f32Path))
+		using (MemoryMappedReadOnlyBuffer? originalVectorIds = string.IsNullOrWhiteSpace(originalIdsPath)
+			? null
+			: MemoryMappedReadOnlyBuffer.OpenRead(originalIdsPath))
 		using (MemoryMappedReadOnlyBuffer labels = MemoryMappedReadOnlyBuffer.OpenRead(labelPath))
 		using (FileStream q8Stream = CreateOutputStream(q8TempPath))
-		using (FileStream f16Stream = CreateOutputStream(f16TempPath)) {
+		using (FileStream f16Stream = CreateOutputStream(f16TempPath))
+		using (FileStream? f32Stream = string.IsNullOrWhiteSpace(f32TempPath)
+			? null
+			: CreateOutputStream(f32TempPath))
+		using (FileStream? originalIdsStream = string.IsNullOrWhiteSpace(originalIdsTempPath)
+			? null
+			: CreateOutputStream(originalIdsTempPath)) {
 			ReadOnlySpan<byte> quantizedSpan = quantizedVectors.GetSpan();
 			ReadOnlySpan<byte> rerankSpan = rerankVectors.GetSpan();
+			ReadOnlySpan<byte> fullPrecisionRerankSpan = (fullPrecisionRerankVectors is null)
+				? ReadOnlySpan<byte>.Empty
+				: fullPrecisionRerankVectors.GetSpan();
+			ReadOnlySpan<int> originalIdSpan = (originalVectorIds is null)
+				? ReadOnlySpan<int>.Empty
+				: MemoryMarshal.Cast<byte, int>(originalVectorIds.GetSpan());
 			ReadOnlySpan<byte> labelSpan = labels.GetSpan();
 			byte[] reorderedLabels = new byte[(orderedOriginalIds.Length + 7) / 8];
+			byte[] originalIdBuffer = new byte[sizeof(int)];
 
 			for (int destinationIndex = 0; destinationIndex < orderedOriginalIds.Length; destinationIndex++) {
 				int sourceIndex = orderedOriginalIds[destinationIndex];
 				q8Stream.Write(quantizedSpan.Slice(sourceIndex * q8Width, q8Width));
 				f16Stream.Write(rerankSpan.Slice(sourceIndex * f16Width, f16Width));
+
+				if (f32Stream is not null) {
+					f32Stream.Write(fullPrecisionRerankSpan.Slice(sourceIndex * f32Width, f32Width));
+				}
+
+				if (originalIdsStream is not null) {
+					BitConverter.TryWriteBytes(originalIdBuffer, originalIdSpan[sourceIndex]);
+					originalIdsStream.Write(originalIdBuffer);
+				}
 
 				if (IsFraud(labelSpan, sourceIndex)) {
 					reorderedLabels[destinationIndex >> 3] |= (byte)(1 << (destinationIndex & 0b111));
@@ -377,9 +416,21 @@ internal static class HierarchicalIndexBuilder {
 		quantizedVectors.Dispose();
 		File.Delete(q8Path);
 		File.Delete(f16Path);
+		if (!string.IsNullOrWhiteSpace(f32Path)) {
+			File.Delete(f32Path);
+		}
+		if (!string.IsNullOrWhiteSpace(originalIdsPath)) {
+			File.Delete(originalIdsPath);
+		}
 		File.Delete(labelPath);
 		File.Move(q8TempPath, q8Path);
 		File.Move(f16TempPath, f16Path);
+		if (!string.IsNullOrWhiteSpace(f32TempPath) && !string.IsNullOrWhiteSpace(f32Path)) {
+			File.Move(f32TempPath, f32Path);
+		}
+		if (!string.IsNullOrWhiteSpace(originalIdsTempPath) && !string.IsNullOrWhiteSpace(originalIdsPath)) {
+			File.Move(originalIdsTempPath, originalIdsPath);
+		}
 		File.Move(labelTempPath, labelPath);
 	}
 

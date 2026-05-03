@@ -58,6 +58,20 @@ public static class DistanceComputations {
 		return distance;
 	}
 
+	public static float SquaredL2F32(ReadOnlySpan<float> query, ReadOnlySpan<byte> encodedVector) {
+		ReadOnlySpan<float> vector = MemoryMarshal.Cast<byte, float>(encodedVector);
+
+		if (query.Length < vector.Length) {
+			throw new ArgumentException("Vector dimensions must match.");
+		}
+
+		if (vector.Length == 16) {
+			return SquaredL2F32Fixed16(query, vector);
+		}
+
+		return SquaredL2(query[..vector.Length], vector);
+	}
+
 	public static int SquaredL2Q8(ReadOnlySpan<sbyte> query, ReadOnlySpan<byte> encodedVector) {
 		ReadOnlySpan<sbyte> vector = MemoryMarshal.Cast<byte, sbyte>(encodedVector);
 		return SquaredL2Q8(query, vector);
@@ -117,6 +131,43 @@ public static class DistanceComputations {
 		float d13 = query[13] - HalfToSingleLookup[values[13]];
 		float d14 = query[14] - HalfToSingleLookup[values[14]];
 		float d15 = query[15] - HalfToSingleLookup[values[15]];
+
+		return
+			(d0 * d0) +
+			(d1 * d1) +
+			(d2 * d2) +
+			(d3 * d3) +
+			(d4 * d4) +
+			(d5 * d5) +
+			(d6 * d6) +
+			(d7 * d7) +
+			(d8 * d8) +
+			(d9 * d9) +
+			(d10 * d10) +
+			(d11 * d11) +
+			(d12 * d12) +
+			(d13 * d13) +
+			(d14 * d14) +
+			(d15 * d15);
+	}
+
+	private static float SquaredL2F32Fixed16(ReadOnlySpan<float> query, ReadOnlySpan<float> vector) {
+		float d0 = query[0] - vector[0];
+		float d1 = query[1] - vector[1];
+		float d2 = query[2] - vector[2];
+		float d3 = query[3] - vector[3];
+		float d4 = query[4] - vector[4];
+		float d5 = query[5] - vector[5];
+		float d6 = query[6] - vector[6];
+		float d7 = query[7] - vector[7];
+		float d8 = query[8] - vector[8];
+		float d9 = query[9] - vector[9];
+		float d10 = query[10] - vector[10];
+		float d11 = query[11] - vector[11];
+		float d12 = query[12] - vector[12];
+		float d13 = query[13] - vector[13];
+		float d14 = query[14] - vector[14];
+		float d15 = query[15] - vector[15];
 
 		return
 			(d0 * d0) +

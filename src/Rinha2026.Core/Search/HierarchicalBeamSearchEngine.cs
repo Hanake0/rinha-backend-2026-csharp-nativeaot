@@ -435,17 +435,34 @@ public sealed class HierarchicalBeamSearchEngine {
 		ReadOnlySpan<float> query,
 		ReadOnlySpan<int> candidateIds,
 		Span<SearchHit> destination) {
-		ReadOnlySpan<byte> rerankVectors = this.artifactSet.FlatArtifacts.GetRerankVectors();
-		int vectorWidthInBytes = checked(this.artifactSet.FlatArtifacts.PaddedDimension * sizeof(ushort));
 		int count = 0;
+
+		if (this.artifactSet.FlatArtifacts.HasFullPrecisionRerankVectors) {
+			ReadOnlySpan<byte> rerankVectors = this.artifactSet.FlatArtifacts.GetFullPrecisionRerankVectors();
+			int vectorWidthInBytes = checked(this.artifactSet.FlatArtifacts.PaddedDimension * sizeof(float));
+
+			for (int candidateIndex = 0; candidateIndex < candidateIds.Length; candidateIndex++) {
+				int vectorId = candidateIds[candidateIndex];
+				float distance = DistanceComputations.SquaredL2F32(
+					query,
+					rerankVectors.Slice(vectorId * vectorWidthInBytes, vectorWidthInBytes));
+				bool isFraud = this.artifactSet.FlatArtifacts.IsFraud(vectorId);
+				InsertSorted(destination, ref count, new SearchHit(vectorId, distance, isFraud), this.artifactSet.FlatArtifacts);
+			}
+
+			return count;
+		}
+
+		ReadOnlySpan<byte> fallbackRerankVectors = this.artifactSet.FlatArtifacts.GetRerankVectors();
+		int fallbackVectorWidthInBytes = checked(this.artifactSet.FlatArtifacts.PaddedDimension * sizeof(ushort));
 
 		for (int candidateIndex = 0; candidateIndex < candidateIds.Length; candidateIndex++) {
 			int vectorId = candidateIds[candidateIndex];
 			float distance = DistanceComputations.SquaredL2F16(
 				query,
-				rerankVectors.Slice(vectorId * vectorWidthInBytes, vectorWidthInBytes));
+				fallbackRerankVectors.Slice(vectorId * fallbackVectorWidthInBytes, fallbackVectorWidthInBytes));
 			bool isFraud = this.artifactSet.FlatArtifacts.IsFraud(vectorId);
-			InsertSorted(destination, ref count, new SearchHit(vectorId, distance, isFraud));
+			InsertSorted(destination, ref count, new SearchHit(vectorId, distance, isFraud), this.artifactSet.FlatArtifacts);
 		}
 
 		return count;
@@ -459,14 +476,14 @@ public sealed class HierarchicalBeamSearchEngine {
 
 	private static bool IsWithoutHistoryQuery(ReadOnlySpan<float> query) => (query[5] < 0f) && (query[6] < 0f);
 
-	private static void InsertSorted(Span<SearchHit> destination, ref int count, SearchHit candidate) {
-		if ((count == destination.Length) && (candidate.Distance >= destination[destination.Length - 1].Distance)) {
+	private static void InsertSorted(Span<SearchHit> destination, ref int count, SearchHit candidate, FlatArtifactSet artifactSet) {
+		if ((count == destination.Length) && !ShouldInsertBefore(candidate, destination[destination.Length - 1], artifactSet)) {
 			return;
 		}
 
 		int insertAt = Math.Min(count, destination.Length - 1);
 
-		while ((insertAt > 0) && (candidate.Distance < destination[insertAt - 1].Distance)) {
+		while ((insertAt > 0) && ShouldInsertBefore(candidate, destination[insertAt - 1], artifactSet)) {
 			if (insertAt < destination.Length) {
 				destination[insertAt] = destination[insertAt - 1];
 			}
@@ -479,6 +496,18 @@ public sealed class HierarchicalBeamSearchEngine {
 		if (count < destination.Length) {
 			count++;
 		}
+	}
+
+	private static bool ShouldInsertBefore(SearchHit candidate, SearchHit existing, FlatArtifactSet artifactSet) {
+		if (candidate.Distance < existing.Distance) {
+			return true;
+		}
+
+		if (candidate.Distance > existing.Distance) {
+			return false;
+		}
+
+		return artifactSet.GetStableOrderKey(candidate.Index) < artifactSet.GetStableOrderKey(existing.Index);
 	}
 
 	private static void InsertSorted(

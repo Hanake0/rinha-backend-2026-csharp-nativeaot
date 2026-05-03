@@ -12,6 +12,7 @@ public class RerankDistanceBenchmarks {
 	private static readonly float[] HalfToSingleLookup = CreateHalfToSingleLookup();
 
 	private float[] query = default!;
+	private byte[] encodedFullPrecisionVector = default!;
 	private byte[] encodedVector = default!;
 
 	[GlobalSetup]
@@ -35,6 +36,7 @@ public class RerankDistanceBenchmarks {
 			0f,
 		];
 		this.encodedVector = new byte[sizeof(ushort) * 16];
+		this.encodedFullPrecisionVector = new byte[sizeof(float) * 16];
 
 		Half[] source = [
 			(Half)0.11f,
@@ -54,7 +56,26 @@ public class RerankDistanceBenchmarks {
 			(Half)0f,
 			(Half)0f,
 		];
+		float[] fullPrecisionSource = [
+			0.11f,
+			0.95f,
+			0.39f,
+			0.73f,
+			0.15f,
+			-1f,
+			-1f,
+			0.62f,
+			0.35f,
+			1f,
+			0f,
+			1f,
+			0.48f,
+			0.22f,
+			0f,
+			0f,
+		];
 		source.AsSpan().CopyTo(MemoryMarshal.Cast<byte, Half>(this.encodedVector.AsSpan()));
+		fullPrecisionSource.AsSpan().CopyTo(MemoryMarshal.Cast<byte, float>(this.encodedFullPrecisionVector.AsSpan()));
 	}
 
 	[Benchmark(Baseline = true)]
@@ -68,6 +89,9 @@ public class RerankDistanceBenchmarks {
 
 	[Benchmark]
 	public float ProductionDistancePath() => DistanceComputations.SquaredL2F16(this.query, this.encodedVector);
+
+	[Benchmark]
+	public float ProductionFullPrecisionDistancePath() => DistanceComputations.SquaredL2F32(this.query, this.encodedFullPrecisionVector);
 
 	private static float CurrentScalar(ReadOnlySpan<float> query, ReadOnlySpan<byte> encodedVector) {
 		ReadOnlySpan<Half> values = MemoryMarshal.Cast<byte, Half>(encodedVector);

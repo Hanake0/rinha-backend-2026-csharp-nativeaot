@@ -27,6 +27,8 @@ public sealed class IndexManifest {
 
 	public int Level2ClustersPerLevel1 { get; init; }
 
+	public string OriginalVectorIdFile { get; init; } = string.Empty;
+
 	public int PaddedDimension { get; init; }
 
 	public string PostingLayout { get; init; } = "ExplicitIds";
@@ -40,6 +42,8 @@ public sealed class IndexManifest {
 	public float QuantizationScale { get; init; } = 127f;
 
 	public string QuantizedVectorFile { get; init; } = "vectors.q8.bin";
+
+	public string FullPrecisionRerankVectorFile { get; init; } = string.Empty;
 
 	public string RerankVectorFile { get; init; } = "vectors.f16.bin";
 
