@@ -39,12 +39,13 @@
   - adaptive boundary rerank fallback promoted from `32 -> 48`
   - unix-domain-socket transport stack
   - in-process artifact memory promotion
+  - shared Docker-managed data volume seeded by a helper container
   - shared `searchd` pivot behind nginx
   - native AOT tcp L4 load balancer
   - class-aware exact fraud-count search
 - next candidate branch:
   - lower-overhead HTTP server path to remove the remaining stack-visible transport cost
-  - selective hot-structure promotion that uses spare RAM without splitting the index per API
+  - direct raw-http API path to isolate Kestrel overhead on `/fraud-score`
   - raw HTTP API server remains on the table because nginx is not the main gap
   - only revisit a custom LB if it is request-aware and it can prove a win under the same envelope
 
@@ -147,6 +148,12 @@
   - evaluator remained exact across `rerankCount = 10, 12, 16, 20, 24, 32, 40, 48`
   - best observed evaluator search latency still regressed to about `p99 = 1.53 ms`
   - rejected because the extra frontier bookkeeping cost dominated any rerank reduction
+- shared Docker-managed data volume branch:
+  - added a one-shot `data-init` helper that copied runtime data into a named Docker volume
+  - both APIs memory-mapped that shared Linux-side volume instead of a direct host bind mount
+  - full stack stayed exact at `0 / 0` and landed at `p99 = 1.38 ms`, final `5859.90`
+  - profile comparison was mixed across replicas and did not yield a decisive end-to-end improvement
+  - kept as an experiment, not promoted
 
 ## Latest profiling anchors
 
@@ -181,6 +188,7 @@
 - `benchmarks/results/stack/2026-05-03-searchd-prototype-summary.md`
 - `benchmarks/results/stack/2026-05-03-native-lb-summary.md`
 - `benchmarks/results/stack/2026-05-03-class-aware-summary.md`
+- `benchmarks/results/stack/2026-05-03-shared-data-volume-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-noavx.json`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-partition-on.json`
