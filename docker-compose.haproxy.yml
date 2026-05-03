@@ -1,0 +1,5 @@
+services:
+  lb:
+    image: haproxy:3.0-alpine
+    volumes:
+      - ./ops/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro

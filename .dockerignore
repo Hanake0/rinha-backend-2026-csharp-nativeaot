@@ -1,0 +1,10 @@
+bin/
+obj/
+.git/
+.vs/
+.idea/
+artifacts/
+BenchmarkDotNet.Artifacts/
+TestResults/
+runtime-data/
+plans/
