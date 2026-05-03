@@ -25,7 +25,8 @@ RuntimeConfig runtimeConfig = new(
 		DistanceMetric.SquaredL2,
 		options.IndexKind,
 		PaddedDimension: 16,
-		options.RerankCount),
+		options.RerankCount,
+		options.UseLastTransactionPartitionPruning),
 	new RuntimeHttpConfig(
 		GetRuntimeParserMode(options.ParseMode),
 		ResponseMode.PrecomputedTable,
@@ -58,6 +59,7 @@ List<int>? traceCandidateScanCounts = options.TraceEvery > 0 ? new List<int>() :
 List<int>? traceCandidateRerankCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<int>? traceSelectedLeafCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<int>? traceMaxLeafSizes = options.TraceEvery > 0 ? new List<int>() : null;
+List<int>? traceSecondaryScanCounts = options.TraceEvery > 0 ? new List<int>() : null;
 List<EvaluatorMismatch> mismatches = [];
 SearchHit[] hits = new SearchHit[options.TopK];
 float[] vectorBuffer = new float[FraudVectorizer.PaddedDimension];
@@ -113,11 +115,12 @@ foreach (JsonElement entry in entries) {
 		searchTicks[evaluatedCount] = requestEnd - searchStart;
 		totalTicks[evaluatedCount] = requestEnd - vectorizationStart;
 
-		if ((options.TraceEvery > 0) && ((evaluatedCount % options.TraceEvery) == 0) && searchRuntime.TryTrace(vectorBuffer, out HierarchicalSearchTrace trace)) {
+		if ((options.TraceEvery > 0) && ((evaluatedCount % options.TraceEvery) == 0) && searchRuntime.TryTrace(vectorBuffer, options.TopK, out HierarchicalSearchTrace trace)) {
 			traceCandidateScanCounts!.Add(trace.CandidateScanCount);
 			traceCandidateRerankCounts!.Add(trace.CandidateRerankCount);
 			traceSelectedLeafCounts!.Add(trace.SelectedLeafCount);
 			traceMaxLeafSizes!.Add(trace.MaxSelectedLeafSize);
+			traceSecondaryScanCounts!.Add(trace.SecondaryCandidateScanCount);
 		}
 
 		fraudScore = fraudCount / (double)options.TopK;
@@ -159,13 +162,14 @@ EvaluatorSummary summary = new(
 		options.ParseMode.ToString(),
 		options.BeamLevel1,
 		options.BeamLevel2,
-		options.RerankCount,
-		options.TopK,
-		options.ApprovalThreshold,
-		options.StartIndex,
-		options.TraceEvery,
-		options.MismatchLimit,
-		evaluatedCount),
+	options.RerankCount,
+	options.TopK,
+	options.ApprovalThreshold,
+	options.UseLastTransactionPartitionPruning,
+	options.StartIndex,
+	options.TraceEvery,
+	options.MismatchLimit,
+	evaluatedCount),
 	new EvaluatorDatasetStats(
 		stats.GetProperty("total").GetInt32(),
 		stats.GetProperty("fraud_count").GetInt32(),
@@ -190,7 +194,8 @@ EvaluatorSummary summary = new(
 		traceCandidateScanCounts,
 		traceCandidateRerankCounts,
 		traceSelectedLeafCounts,
-		traceMaxLeafSizes));
+		traceMaxLeafSizes,
+		traceSecondaryScanCounts));
 
 Console.WriteLine(JsonSerializer.Serialize(
 	summary,
@@ -249,11 +254,13 @@ static TraceSummary? BuildTraceSummary(
 	List<int>? candidateScanCounts,
 	List<int>? candidateRerankCounts,
 	List<int>? selectedLeafCounts,
-	List<int>? maxLeafSizes) {
+	List<int>? maxLeafSizes,
+	List<int>? secondaryScanCounts) {
 	if ((candidateScanCounts is null) ||
 		(candidateRerankCounts is null) ||
 		(selectedLeafCounts is null) ||
 		(maxLeafSizes is null) ||
+		(secondaryScanCounts is null) ||
 		(candidateScanCounts.Count == 0)) {
 		return null;
 	}
@@ -263,7 +270,8 @@ static TraceSummary? BuildTraceSummary(
 		BuildIntMetricSummary(candidateScanCounts),
 		BuildIntMetricSummary(candidateRerankCounts),
 		BuildIntMetricSummary(selectedLeafCounts),
-		BuildIntMetricSummary(maxLeafSizes));
+		BuildIntMetricSummary(maxLeafSizes),
+		BuildIntMetricSummary(secondaryScanCounts));
 }
 
 static IntMetricSummary BuildIntMetricSummary(List<int> values) {
@@ -449,6 +457,7 @@ internal sealed record EvaluatorSettings(
 	int RerankCount,
 	int TopK,
 	double ApprovalThreshold,
+	bool UseLastTransactionPartitionPruning,
 	int StartIndex,
 	int TraceEvery,
 	int MismatchLimit,
@@ -504,7 +513,8 @@ internal sealed record TraceSummary(
 	IntMetricSummary CandidateScanCount,
 	IntMetricSummary CandidateRerankCount,
 	IntMetricSummary SelectedLeafCount,
-	IntMetricSummary MaxSelectedLeafSize);
+	IntMetricSummary MaxSelectedLeafSize,
+	IntMetricSummary SecondaryCandidateScanCount);
 
 internal sealed record IntMetricSummary(
 	int Min,
@@ -528,7 +538,8 @@ internal sealed class EvaluatorOptions {
 		int startIndex,
 		int limit,
 		int traceEvery,
-		int mismatchLimit) {
+		int mismatchLimit,
+		bool useLastTransactionPartitionPruning) {
 		this.TestDataPath = testDataPath;
 		this.RuntimeDataRoot = runtimeDataRoot;
 		this.IndexKind = indexKind;
@@ -542,6 +553,7 @@ internal sealed class EvaluatorOptions {
 		this.Limit = limit;
 		this.TraceEvery = traceEvery;
 		this.MismatchLimit = mismatchLimit;
+		this.UseLastTransactionPartitionPruning = useLastTransactionPartitionPruning;
 	}
 
 	public double ApprovalThreshold { get; }
@@ -570,6 +582,8 @@ internal sealed class EvaluatorOptions {
 
 	public int TraceEvery { get; }
 
+	public bool UseLastTransactionPartitionPruning { get; }
+
 	public static EvaluatorOptions Parse(string[] args) {
 		string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
 		string defaultRuntimeDataRoot = Path.Combine(repoRoot, "runtime-data");
@@ -597,7 +611,8 @@ internal sealed class EvaluatorOptions {
 			int.Parse(GetValue(values, "--start-index", "0"), System.Globalization.CultureInfo.InvariantCulture),
 			int.Parse(GetValue(values, "--limit", "0"), System.Globalization.CultureInfo.InvariantCulture),
 			int.Parse(GetValue(values, "--trace-every", "0"), System.Globalization.CultureInfo.InvariantCulture),
-			int.Parse(GetValue(values, "--mismatch-limit", "32"), System.Globalization.CultureInfo.InvariantCulture));
+			int.Parse(GetValue(values, "--mismatch-limit", "32"), System.Globalization.CultureInfo.InvariantCulture),
+			bool.Parse(GetValue(values, "--use-last-transaction-partition-pruning", "true")));
 	}
 
 	private static string GetValue(Dictionary<string, string> values, string key, string fallback) =>

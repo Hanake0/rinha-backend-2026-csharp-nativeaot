@@ -13,6 +13,7 @@ param(
 	[int]$BeamLevel2 = 32,
 	[string]$SearchIndexKind = "HierarchicalBeamIvf",
 	[int]$RerankCount = 48,
+	[bool]$UseLastTransactionPartitionPruning = $true,
 	[int]$TopK = 5,
 	[double]$LbCpus = 0.20,
 	[double]$ApiCpus = 0.40,
@@ -62,6 +63,7 @@ $env:SEARCH_BEAM_LEVEL1 = $BeamLevel1.ToString([System.Globalization.CultureInfo
 $env:SEARCH_BEAM_LEVEL2 = $BeamLevel2.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 $env:SEARCH_INDEX_KIND = $SearchIndexKind
 $env:SEARCH_RERANK_COUNT = $RerankCount.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+$env:SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING = $UseLastTransactionPartitionPruning.ToString().ToLowerInvariant()
 $env:RUNTIME_DATA_DIR = $runtimeDataRoot
 $env:RUNTIME_INDEX_DIRECTORY = "/app/data/index"
 $env:RUNTIME_MCC_RISK_PATH = "/app/data/mcc_risk.json"
@@ -137,6 +139,7 @@ docker stats --no-stream $lbContainerId rinha2026-api1 rinha2026-api2 | Tee-Obje
 "BeamLevel1=$BeamLevel1" | Tee-Object -FilePath $statsPath -Append | Out-Null
 "BeamLevel2=$BeamLevel2" | Tee-Object -FilePath $statsPath -Append | Out-Null
 "RerankCount=$RerankCount" | Tee-Object -FilePath $statsPath -Append | Out-Null
+"UseLastTransactionPartitionPruning=$UseLastTransactionPartitionPruning" | Tee-Object -FilePath $statsPath -Append | Out-Null
 "TopK=$TopK" | Tee-Object -FilePath $statsPath -Append | Out-Null
 "ApprovalThreshold=$ApprovalThreshold" | Tee-Object -FilePath $statsPath -Append | Out-Null
 "HttpInlineScheduling=$HttpInlineScheduling" | Tee-Object -FilePath $statsPath -Append | Out-Null

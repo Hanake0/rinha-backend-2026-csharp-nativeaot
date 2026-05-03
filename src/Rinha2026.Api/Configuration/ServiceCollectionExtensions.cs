@@ -109,6 +109,10 @@ public static class ServiceCollectionExtensions {
 					configuration,
 					"Runtime:Search:RerankCount",
 					defaults.Search.RerankCount),
+				UseLastTransactionPartitionPruning = GetBoolean(
+					configuration,
+					"Runtime:Search:UseLastTransactionPartitionPruning",
+					defaults.Search.UseLastTransactionPartitionPruning),
 			},
 		};
 	}

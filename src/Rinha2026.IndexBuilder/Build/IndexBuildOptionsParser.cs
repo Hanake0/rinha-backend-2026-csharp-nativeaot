@@ -12,6 +12,7 @@ public static class IndexBuildOptionsParser {
 		int level2ClustersPerLevel1 = 8;
 		int paddedDimension = 16;
 		int trainingSampleSize = 16_384;
+		bool useLastTransactionPartitioning = false;
 
 		for (int index = 0; index < args.Length; index++) {
 			switch (args[index]) {
@@ -71,6 +72,13 @@ public static class IndexBuildOptionsParser {
 					}
 
 					break;
+				case "--use-last-transaction-partitioning":
+					if (!TryReadBooleanValue(args, ref index, out useLastTransactionPartitioning)) {
+						errorMessage = "Missing or invalid value for --use-last-transaction-partitioning.";
+						return null;
+					}
+
+					break;
 				default:
 					errorMessage = $"Unknown argument '{args[index]}'.";
 					return null;
@@ -78,7 +86,7 @@ public static class IndexBuildOptionsParser {
 		}
 
 		if (string.IsNullOrWhiteSpace(inputPath) || string.IsNullOrWhiteSpace(outputDirectory)) {
-			errorMessage = "Usage: --input <path-to-references.json.gz> --output <artifact-directory> [--dimension 14] [--padded-dimension 16] [--level1-clusters 32] [--level2-per-level1 8] [--training-sample-size 16384] [--kmeans-iterations 8]";
+			errorMessage = "Usage: --input <path-to-references.json.gz> --output <artifact-directory> [--dimension 14] [--padded-dimension 16] [--level1-clusters 32] [--level2-per-level1 8] [--training-sample-size 16384] [--kmeans-iterations 8] [--use-last-transaction-partitioning true|false]";
 			return null;
 		}
 
@@ -122,7 +130,13 @@ public static class IndexBuildOptionsParser {
 			OutputDirectory = outputDirectory,
 			PaddedDimension = paddedDimension,
 			TrainingSampleSize = trainingSampleSize,
+			UseLastTransactionPartitioning = useLastTransactionPartitioning,
 		};
+	}
+
+	private static bool TryReadBooleanValue(string[] args, ref int index, out bool value) {
+		value = default;
+		return TryReadValue(args, ref index, out string? text) && bool.TryParse(text, out value);
 	}
 
 	private static bool TryReadIntValue(string[] args, ref int index, out int value) {

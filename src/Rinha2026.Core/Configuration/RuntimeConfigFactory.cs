@@ -26,7 +26,8 @@ public static class RuntimeConfigFactory {
 			settings.Search.DistanceMetric,
 			settings.Search.IndexKind,
 			settings.Search.PaddedDimension,
-			settings.Search.RerankCount);
+			settings.Search.RerankCount,
+			settings.Search.UseLastTransactionPartitionPruning);
 
 		RuntimeHttpConfig http = new(
 			settings.Http.ParserMode,

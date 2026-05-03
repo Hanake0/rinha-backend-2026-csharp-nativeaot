@@ -16,4 +16,6 @@ public sealed class IndexBuildOptions {
 	public int PaddedDimension { get; init; } = 16;
 
 	public int TrainingSampleSize { get; init; } = 16_384;
+
+	public bool UseLastTransactionPartitioning { get; init; }
 }

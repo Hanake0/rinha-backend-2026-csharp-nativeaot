@@ -96,7 +96,8 @@ public class FraudDetectionPipelineBenchmarks {
 			DistanceMetric: DistanceMetric.SquaredL2,
 			IndexKind: indexKind,
 			PaddedDimension: 16,
-			RerankCount: 48),
+			RerankCount: 48,
+			UseLastTransactionPartitionPruning: true),
 		new RuntimeHttpConfig(
 			ParserMode: ParserMode.Manual,
 			ResponseMode: ResponseMode.PrecomputedTable,

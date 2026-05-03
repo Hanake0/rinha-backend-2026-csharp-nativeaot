@@ -47,6 +47,7 @@ internal sealed class TemporaryArtifactCorpus : IDisposable {
 			OutputDirectory = indexDirectory,
 			PaddedDimension = options.PaddedDimension,
 			TrainingSampleSize = options.TrainingSampleSize,
+			UseLastTransactionPartitioning = options.UseLastTransactionPartitioning,
 		};
 
 		await ReferenceCorpusBuilder.BuildAsync(effectiveOptions, CancellationToken.None);

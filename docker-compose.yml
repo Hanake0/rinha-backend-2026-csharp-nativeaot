@@ -37,6 +37,7 @@ services:
       Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-32}
       Runtime__Search__IndexKind: ${SEARCH_INDEX_KIND:-HierarchicalBeamIvf}
       Runtime__Search__RerankCount: ${SEARCH_RERANK_COUNT:-48}
+      Runtime__Search__UseLastTransactionPartitionPruning: ${SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING:-true}
     volumes:
       - ${RUNTIME_DATA_DIR:-./runtime-data}:/app/data:ro
     cpus: ${API_CPUS:-0.40}
@@ -67,6 +68,7 @@ services:
       Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-32}
       Runtime__Search__IndexKind: ${SEARCH_INDEX_KIND:-HierarchicalBeamIvf}
       Runtime__Search__RerankCount: ${SEARCH_RERANK_COUNT:-48}
+      Runtime__Search__UseLastTransactionPartitionPruning: ${SEARCH_USE_LAST_TRANSACTION_PARTITION_PRUNING:-true}
     volumes:
       - ${RUNTIME_DATA_DIR:-./runtime-data}:/app/data:ro
     cpus: ${API_CPUS:-0.40}

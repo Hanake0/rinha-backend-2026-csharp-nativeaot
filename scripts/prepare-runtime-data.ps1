@@ -4,7 +4,8 @@ param(
 	[int]$Level1Clusters = 128,
 	[int]$Level2PerLevel1 = 16,
 	[int]$TrainingSampleSize = 32768,
-	[int]$KMeansIterations = 8
+	[int]$KMeansIterations = 8,
+	[bool]$UseLastTransactionPartitioning = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,4 +42,5 @@ dotnet run -c Release --project (Join-Path $repoRoot "src\\Rinha2026.IndexBuilde
 	--level1-clusters $Level1Clusters `
 	--level2-per-level1 $Level2PerLevel1 `
 	--training-sample-size $TrainingSampleSize `
-	--kmeans-iterations $KMeansIterations
+	--kmeans-iterations $KMeansIterations `
+	--use-last-transaction-partitioning $UseLastTransactionPartitioning

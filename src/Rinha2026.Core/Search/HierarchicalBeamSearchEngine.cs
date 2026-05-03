@@ -3,10 +3,16 @@ using Rinha2026.Core.Indexing;
 namespace Rinha2026.Core.Search;
 
 public sealed class HierarchicalBeamSearchEngine {
-	private readonly HierarchicalArtifactSet artifactSet;
+	private const float CrossHistoryLowerBoundSquaredL2 = 2f;
 
-	public HierarchicalBeamSearchEngine(HierarchicalArtifactSet artifactSet) {
+	private readonly HierarchicalArtifactSet artifactSet;
+	private readonly bool useLastTransactionPartitionPruning;
+
+	public HierarchicalBeamSearchEngine(
+		HierarchicalArtifactSet artifactSet,
+		bool useLastTransactionPartitionPruning = true) {
 		this.artifactSet = artifactSet ?? throw new ArgumentNullException(nameof(artifactSet));
+		this.useLastTransactionPartitionPruning = useLastTransactionPartitionPruning;
 	}
 
 	public int CountFraud(
@@ -62,22 +68,64 @@ public sealed class HierarchicalBeamSearchEngine {
 
 		int parentCount = this.SelectNearestParents(query, parentIds, parentDistances);
 		int leafCount = this.SelectNearestLeaves(query, parentIds[..parentCount], leafIds, leafDistances);
-		int candidateCount = this.SelectTopCandidates(
+
+		if (!this.ShouldUseLastTransactionPartitionPruning()) {
+			int candidateCount = 0;
+			candidateCount = this.SelectTopCandidates(
+				quantizedQuery,
+				leafIds[..leafCount],
+				candidateIds,
+				candidateDistances,
+				ref candidateCount,
+				CandidatePartitionSelection.All,
+				queryWithoutHistory: false,
+				out _,
+				out _,
+				out _);
+			return this.RerankCandidates(query, candidateIds[..candidateCount], destination);
+		}
+
+		bool queryWithoutHistory = IsWithoutHistoryQuery(query);
+		int candidateCountWithSamePartition = 0;
+		candidateCountWithSamePartition = this.SelectTopCandidates(
 			quantizedQuery,
 			leafIds[..leafCount],
 			candidateIds,
 			candidateDistances,
+			ref candidateCountWithSamePartition,
+			CandidatePartitionSelection.SamePartitionOnly,
+			queryWithoutHistory,
 			out _,
 			out _,
 			out _);
-		return this.RerankCandidates(query, candidateIds[..candidateCount], destination);
+		int matchCount = this.RerankCandidates(query, candidateIds[..candidateCountWithSamePartition], destination);
+
+		if ((matchCount == destination.Length) &&
+			(destination[matchCount - 1].Distance < CrossHistoryLowerBoundSquaredL2)) {
+			return matchCount;
+		}
+
+		int mergedCandidateCount = candidateCountWithSamePartition;
+		mergedCandidateCount = this.SelectTopCandidates(
+			quantizedQuery,
+			leafIds[..leafCount],
+			candidateIds,
+			candidateDistances,
+			ref mergedCandidateCount,
+			CandidatePartitionSelection.OppositePartitionOnly,
+			queryWithoutHistory,
+			out _,
+			out _,
+			out _);
+		return this.RerankCandidates(query, candidateIds[..mergedCandidateCount], destination);
 	}
 
 	public HierarchicalSearchTrace Trace(
 		ReadOnlySpan<float> query,
 		int beamLevel1,
 		int beamLevel2,
-		int rerankCount) {
+		int rerankCount,
+		int topK) {
 		FlatArtifactSet flatArtifacts = this.artifactSet.FlatArtifacts;
 
 		if (query.Length < flatArtifacts.PaddedDimension) {
@@ -98,27 +146,83 @@ public sealed class HierarchicalBeamSearchEngine {
 		Span<int> candidateIds = candidateCapacity <= 512 ? stackalloc int[candidateCapacity] : new int[candidateCapacity];
 		Span<int> candidateDistances = candidateCapacity <= 512 ? stackalloc int[candidateCapacity] : new int[candidateCapacity];
 		Span<sbyte> quantizedQuery = stackalloc sbyte[flatArtifacts.PaddedDimension];
+		Span<SearchHit> rerankHits = topK <= 16 ? stackalloc SearchHit[topK] : new SearchHit[topK];
 
 		VectorEncoding.EncodeQ8Symmetric(query[..flatArtifacts.PaddedDimension], quantizedQuery);
 
 		int parentCount = this.SelectNearestParents(query, parentIds, parentDistances);
 		int leafCount = this.SelectNearestLeaves(query, parentIds[..parentCount], leafIds, leafDistances);
-		int candidateCount = this.SelectTopCandidates(
+
+		if (!this.ShouldUseLastTransactionPartitionPruning()) {
+			int candidateCount = 0;
+			candidateCount = this.SelectTopCandidates(
+				quantizedQuery,
+				leafIds[..leafCount],
+				candidateIds,
+				candidateDistances,
+				ref candidateCount,
+				CandidatePartitionSelection.All,
+				queryWithoutHistory: false,
+				out int scannedCandidateCount,
+				out int branchMaxSelectedLeafSize,
+				out int branchMinSelectedLeafSize);
+			return new HierarchicalSearchTrace(
+				parentCount,
+				leafCount,
+				scannedCandidateCount,
+				candidateCount,
+				branchMaxSelectedLeafSize,
+				branchMinSelectedLeafSize,
+				SecondaryCandidateScanCount: 0);
+		}
+
+		bool queryWithoutHistory = IsWithoutHistoryQuery(query);
+		int candidateCountWithSamePartition = 0;
+		candidateCountWithSamePartition = this.SelectTopCandidates(
 			quantizedQuery,
 			leafIds[..leafCount],
 			candidateIds,
 			candidateDistances,
-			out int scannedCandidateCount,
+			ref candidateCountWithSamePartition,
+			CandidatePartitionSelection.SamePartitionOnly,
+			queryWithoutHistory,
+			out int primaryScanCount,
 			out int maxSelectedLeafSize,
 			out int minSelectedLeafSize);
+		int provisionalCount = this.RerankCandidates(query, candidateIds[..candidateCountWithSamePartition], rerankHits);
 
+		if ((provisionalCount == rerankHits.Length) &&
+			(rerankHits[provisionalCount - 1].Distance < CrossHistoryLowerBoundSquaredL2)) {
+			return new HierarchicalSearchTrace(
+				parentCount,
+				leafCount,
+				primaryScanCount,
+				candidateCountWithSamePartition,
+				maxSelectedLeafSize,
+				minSelectedLeafSize,
+				SecondaryCandidateScanCount: 0);
+		}
+
+		int mergedCandidateCount = candidateCountWithSamePartition;
+		mergedCandidateCount = this.SelectTopCandidates(
+			quantizedQuery,
+			leafIds[..leafCount],
+			candidateIds,
+			candidateDistances,
+			ref mergedCandidateCount,
+			CandidatePartitionSelection.OppositePartitionOnly,
+			queryWithoutHistory,
+			out int secondaryScanCount,
+			out _,
+			out _);
 		return new HierarchicalSearchTrace(
 			parentCount,
 			leafCount,
-			scannedCandidateCount,
-			candidateCount,
+			primaryScanCount + secondaryScanCount,
+			mergedCandidateCount,
 			maxSelectedLeafSize,
-			minSelectedLeafSize);
+			minSelectedLeafSize,
+			secondaryScanCount);
 	}
 
 	private int SelectNearestParents(ReadOnlySpan<float> query, Span<int> destinationIds, Span<float> destinationDistances) {
@@ -166,13 +270,18 @@ public sealed class HierarchicalBeamSearchEngine {
 		ReadOnlySpan<int> selectedLeaves,
 		Span<int> destinationIds,
 		Span<int> destinationDistances,
+		ref int count,
+		CandidatePartitionSelection partitionSelection,
+		bool queryWithoutHistory,
 		out int scannedCandidateCount,
 		out int maxSelectedLeafSize,
 		out int minSelectedLeafSize) {
 		ReadOnlySpan<int> postingOffsets = this.artifactSet.GetLeafPostingOffsets();
 		ReadOnlySpan<byte> quantizedVectors = this.artifactSet.FlatArtifacts.GetQuantizedVectors();
+		ReadOnlySpan<int> leafWithoutHistoryCounts = this.artifactSet.HasLastTransactionPartitioning
+			? this.artifactSet.GetLeafWithoutHistoryCounts()
+			: ReadOnlySpan<int>.Empty;
 		int paddedDimension = this.artifactSet.FlatArtifacts.PaddedDimension;
-		int count = 0;
 		int leafCount = 0;
 		scannedCandidateCount = 0;
 		maxSelectedLeafSize = 0;
@@ -182,7 +291,29 @@ public sealed class HierarchicalBeamSearchEngine {
 			int leafId = selectedLeaves[leafIndex];
 			int start = postingOffsets[leafId];
 			int end = postingOffsets[leafId + 1];
+
+			if ((partitionSelection != CandidatePartitionSelection.All) && this.artifactSet.HasLastTransactionPartitioning) {
+				int split = start + leafWithoutHistoryCounts[leafId];
+
+				if (queryWithoutHistory) {
+					if (partitionSelection == CandidatePartitionSelection.SamePartitionOnly) {
+						end = split;
+					} else {
+						start = split;
+					}
+				} else if (partitionSelection == CandidatePartitionSelection.SamePartitionOnly) {
+					start = split;
+				} else {
+					end = split;
+				}
+			}
+
 			int leafSize = end - start;
+
+			if (leafSize <= 0) {
+				continue;
+			}
+
 			scannedCandidateCount += leafSize;
 			maxSelectedLeafSize = Math.Max(maxSelectedLeafSize, leafSize);
 			minSelectedLeafSize = Math.Min(minSelectedLeafSize, leafSize);
@@ -238,6 +369,11 @@ public sealed class HierarchicalBeamSearchEngine {
 
 		return count;
 	}
+
+	private bool ShouldUseLastTransactionPartitionPruning() =>
+		this.useLastTransactionPartitionPruning && this.artifactSet.HasLastTransactionPartitioning;
+
+	private static bool IsWithoutHistoryQuery(ReadOnlySpan<float> query) => (query[5] < 0f) && (query[6] < 0f);
 
 	private static void InsertSorted(Span<SearchHit> destination, ref int count, SearchHit candidate) {
 		if ((count == destination.Length) && (candidate.Distance >= destination[destination.Length - 1].Distance)) {
@@ -357,5 +493,11 @@ public sealed class HierarchicalBeamSearchEngine {
 			InsertSorted(destinationIds, destinationDistances, ref count, vectorId, distance);
 			vectorOffset += paddedDimension;
 		}
+	}
+
+	private enum CandidatePartitionSelection {
+		All = 0,
+		SamePartitionOnly = 1,
+		OppositePartitionOnly = 2,
 	}
 }

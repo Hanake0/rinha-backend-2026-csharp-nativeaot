@@ -6,4 +6,5 @@ public readonly record struct HierarchicalSearchTrace(
 	int CandidateScanCount,
 	int CandidateRerankCount,
 	int MaxSelectedLeafSize,
-	int MinSelectedLeafSize);
+	int MinSelectedLeafSize,
+	int SecondaryCandidateScanCount);

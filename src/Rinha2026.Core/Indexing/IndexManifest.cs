@@ -13,6 +13,8 @@ public sealed class IndexManifest {
 
 	public string LeafCentroidFile { get; init; } = "leaf.centroids.f32.bin";
 
+	public string LeafWithoutHistoryCountFile { get; init; } = string.Empty;
+
 	public string LeafPostingIdsFile { get; init; } = "leaf.postings.ids.bin";
 
 	public string LeafPostingOffsetsFile { get; init; } = "leaf.postings.offsets.bin";

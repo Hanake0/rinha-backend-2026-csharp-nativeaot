@@ -8,6 +8,7 @@ param(
 	[int]$RerankCount = 48,
 	[int]$TopK = 5,
 	[double]$ApprovalThreshold = 0.6,
+	[bool]$UseLastTransactionPartitionPruning = $true,
 	[int]$StartIndex = 0,
 	[int]$Limit = 0,
 	[int]$TraceEvery = 0,
@@ -30,6 +31,7 @@ dotnet run -c Release --project (Join-Path $repoRoot "tools\\Rinha2026.Evaluator
 	--rerank-count $RerankCount `
 	--top-k $TopK `
 	--approval-threshold $ApprovalThreshold `
+	--use-last-transaction-partition-pruning $UseLastTransactionPartitionPruning `
 	--start-index $StartIndex `
 	--limit $Limit `
 	--trace-every $TraceEvery `

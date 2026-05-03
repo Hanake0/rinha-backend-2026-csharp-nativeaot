@@ -77,19 +77,95 @@ public sealed class HierarchicalBeamSearchEngineTests {
 		Assert.All(hits, static hit => Assert.InRange(hit.Distance, 0f, 0.01f));
 	}
 
-	private static float[] CreateQuery(float first, float second, float third) {
+	[Fact]
+	public async Task HistoryPartitionPruningSkipsOppositePartitionWhenSamePartitionAlreadyFillsTopK() {
+		IndexBuildOptions buildOptions = new() {
+			InputPath = string.Empty,
+			KMeansIterations = 2,
+			Level1ClusterCount = 1,
+			Level2ClustersPerLevel1 = 1,
+			OutputDirectory = string.Empty,
+			TrainingSampleSize = 8,
+			UseLastTransactionPartitioning = true,
+		};
+
+		using TemporaryArtifactCorpus corpus = await TemporaryArtifactCorpus.CreateAsync(
+			buildOptions,
+			(CreateVector(0.10f, 0.10f, 0.10f, hasLastTransaction: false), "legit"),
+			(CreateVector(0.12f, 0.12f, 0.12f, hasLastTransaction: false), "legit"),
+			(CreateVector(0.14f, 0.14f, 0.14f, hasLastTransaction: false), "legit"),
+			(CreateVector(0.16f, 0.16f, 0.16f, hasLastTransaction: false), "fraud"),
+			(CreateVector(0.18f, 0.18f, 0.18f, hasLastTransaction: false), "fraud"),
+			(CreateVector(0.10f, 0.10f, 0.10f, hasLastTransaction: true), "legit"),
+			(CreateVector(0.12f, 0.12f, 0.12f, hasLastTransaction: true), "fraud"),
+			(CreateVector(0.14f, 0.14f, 0.14f, hasLastTransaction: true), "legit"));
+
+		using HierarchicalArtifactSet hierarchicalArtifacts = HierarchicalArtifactSet.Load(corpus.IndexDirectory);
+		HierarchicalBeamSearchEngine hierarchicalEngine = new(hierarchicalArtifacts);
+		HierarchicalSearchTrace trace = hierarchicalEngine.Trace(
+			CreateQuery(0.15f, 0.15f, 0.15f, hasLastTransaction: false),
+			beamLevel1: 1,
+			beamLevel2: 1,
+			rerankCount: 8,
+			topK: 5);
+
+		Assert.Equal(5, trace.CandidateScanCount);
+		Assert.Equal(0, trace.SecondaryCandidateScanCount);
+	}
+
+	[Fact]
+	public async Task HistoryPartitionPruningFallsBackWhenSamePartitionCannotFillTopK() {
+		IndexBuildOptions buildOptions = new() {
+			InputPath = string.Empty,
+			KMeansIterations = 2,
+			Level1ClusterCount = 1,
+			Level2ClustersPerLevel1 = 1,
+			OutputDirectory = string.Empty,
+			TrainingSampleSize = 8,
+			UseLastTransactionPartitioning = true,
+		};
+
+		using TemporaryArtifactCorpus corpus = await TemporaryArtifactCorpus.CreateAsync(
+			buildOptions,
+			(CreateVector(0.10f, 0.10f, 0.10f, hasLastTransaction: false), "legit"),
+			(CreateVector(0.12f, 0.12f, 0.12f, hasLastTransaction: false), "legit"),
+			(CreateVector(0.14f, 0.14f, 0.14f, hasLastTransaction: false), "legit"),
+			(CreateVector(0.16f, 0.16f, 0.16f, hasLastTransaction: false), "fraud"),
+			(CreateVector(0.10f, 0.10f, 0.10f, hasLastTransaction: true), "legit"),
+			(CreateVector(0.12f, 0.12f, 0.12f, hasLastTransaction: true), "fraud"),
+			(CreateVector(0.14f, 0.14f, 0.14f, hasLastTransaction: true), "legit"),
+			(CreateVector(0.16f, 0.16f, 0.16f, hasLastTransaction: true), "fraud"));
+
+		using HierarchicalArtifactSet hierarchicalArtifacts = HierarchicalArtifactSet.Load(corpus.IndexDirectory);
+		HierarchicalBeamSearchEngine hierarchicalEngine = new(hierarchicalArtifacts);
+		HierarchicalSearchTrace trace = hierarchicalEngine.Trace(
+			CreateQuery(0.15f, 0.15f, 0.15f, hasLastTransaction: false),
+			beamLevel1: 1,
+			beamLevel2: 1,
+			rerankCount: 8,
+			topK: 5);
+
+		Assert.Equal(8, trace.CandidateScanCount);
+		Assert.Equal(4, trace.SecondaryCandidateScanCount);
+	}
+
+	private static float[] CreateQuery(float first, float second, float third, bool hasLastTransaction = false) {
 		float[] query = new float[16];
 		query[0] = first;
 		query[1] = second;
 		query[2] = third;
+		query[5] = hasLastTransaction ? 0.20f : -1f;
+		query[6] = hasLastTransaction ? 0.30f : -1f;
 		return query;
 	}
 
-	private static float[] CreateVector(float first, float second, float third) {
+	private static float[] CreateVector(float first, float second, float third, bool hasLastTransaction = false) {
 		float[] vector = new float[14];
 		vector[0] = first;
 		vector[1] = second;
 		vector[2] = third;
+		vector[5] = hasLastTransaction ? 0.20f : -1f;
+		vector[6] = hasLastTransaction ? 0.30f : -1f;
 		return vector;
 	}
 }

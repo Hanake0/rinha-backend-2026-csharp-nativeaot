@@ -4,6 +4,7 @@ namespace Rinha2026.Core.Indexing;
 
 public sealed class HierarchicalArtifactSet : IDisposable {
 	private readonly MemoryMappedReadOnlyBuffer leafCentroids;
+	private readonly MemoryMappedReadOnlyBuffer? leafWithoutHistoryCounts;
 	private readonly MemoryMappedReadOnlyBuffer leafPostingIds;
 	private readonly MemoryMappedReadOnlyBuffer leafPostingOffsets;
 	private readonly MemoryMappedReadOnlyBuffer level1Centroids;
@@ -14,12 +15,14 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 		MemoryMappedReadOnlyBuffer level1Centroids,
 		MemoryMappedReadOnlyBuffer leafCentroids,
 		MemoryMappedReadOnlyBuffer leafPostingOffsets,
-		MemoryMappedReadOnlyBuffer leafPostingIds) {
+		MemoryMappedReadOnlyBuffer leafPostingIds,
+		MemoryMappedReadOnlyBuffer? leafWithoutHistoryCounts) {
 		this.FlatArtifacts = flatArtifacts;
 		this.level1Centroids = level1Centroids;
 		this.leafCentroids = leafCentroids;
 		this.leafPostingOffsets = leafPostingOffsets;
 		this.leafPostingIds = leafPostingIds;
+		this.leafWithoutHistoryCounts = leafWithoutHistoryCounts;
 	}
 
 	public FlatArtifactSet FlatArtifacts { get; }
@@ -29,6 +32,8 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 	public int Level1ClusterCount => this.FlatArtifacts.Manifest.Level1ClusterCount;
 
 	public int Level2ClustersPerLevel1 => this.FlatArtifacts.Manifest.Level2ClustersPerLevel1;
+
+	public bool HasLastTransactionPartitioning => this.leafWithoutHistoryCounts is not null;
 
 	public bool UsesIdentityPostings => string.Equals(
 		this.FlatArtifacts.Manifest.PostingLayout,
@@ -52,15 +57,34 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 			Path.Combine(indexDirectory, manifest.LeafPostingOffsetsFile));
 		MemoryMappedReadOnlyBuffer leafPostingIds = MemoryMappedReadOnlyBuffer.OpenRead(
 			Path.Combine(indexDirectory, manifest.LeafPostingIdsFile));
+		MemoryMappedReadOnlyBuffer? leafWithoutHistoryCounts = null;
+
+		if (!string.IsNullOrWhiteSpace(manifest.LeafWithoutHistoryCountFile)) {
+			leafWithoutHistoryCounts = MemoryMappedReadOnlyBuffer.OpenRead(
+				Path.Combine(indexDirectory, manifest.LeafWithoutHistoryCountFile));
+		}
 
 		try {
-			ValidateBufferLengths(manifest, level1Centroids, leafCentroids, leafPostingOffsets, leafPostingIds);
-			return new HierarchicalArtifactSet(flatArtifacts, level1Centroids, leafCentroids, leafPostingOffsets, leafPostingIds);
+			ValidateBufferLengths(
+				manifest,
+				level1Centroids,
+				leafCentroids,
+				leafPostingOffsets,
+				leafPostingIds,
+				leafWithoutHistoryCounts);
+			return new HierarchicalArtifactSet(
+				flatArtifacts,
+				level1Centroids,
+				leafCentroids,
+				leafPostingOffsets,
+				leafPostingIds,
+				leafWithoutHistoryCounts);
 		} catch {
 			level1Centroids.Dispose();
 			leafCentroids.Dispose();
 			leafPostingOffsets.Dispose();
 			leafPostingIds.Dispose();
+			leafWithoutHistoryCounts?.Dispose();
 			flatArtifacts.Dispose();
 			throw;
 		}
@@ -81,6 +105,16 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 		return MemoryMarshal.Cast<byte, int>(this.leafPostingOffsets.GetSpan());
 	}
 
+	public ReadOnlySpan<int> GetLeafWithoutHistoryCounts() {
+		ObjectDisposedException.ThrowIf(this.disposed, this);
+
+		if (this.leafWithoutHistoryCounts is null) {
+			throw new InvalidOperationException("The loaded artifact set does not include last-transaction partition metadata.");
+		}
+
+		return MemoryMarshal.Cast<byte, int>(this.leafWithoutHistoryCounts.GetSpan());
+	}
+
 	public ReadOnlySpan<float> GetLevel1Centroids() {
 		ObjectDisposedException.ThrowIf(this.disposed, this);
 		return MemoryMarshal.Cast<byte, float>(this.level1Centroids.GetSpan());
@@ -95,6 +129,7 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 		this.leafCentroids.Dispose();
 		this.leafPostingOffsets.Dispose();
 		this.leafPostingIds.Dispose();
+		this.leafWithoutHistoryCounts?.Dispose();
 		this.FlatArtifacts.Dispose();
 		this.disposed = true;
 	}
@@ -104,7 +139,8 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 		MemoryMappedReadOnlyBuffer level1Centroids,
 		MemoryMappedReadOnlyBuffer leafCentroids,
 		MemoryMappedReadOnlyBuffer leafPostingOffsets,
-		MemoryMappedReadOnlyBuffer leafPostingIds) {
+		MemoryMappedReadOnlyBuffer leafPostingIds,
+		MemoryMappedReadOnlyBuffer? leafWithoutHistoryCounts) {
 		int leafCount = checked(manifest.Level1ClusterCount * manifest.Level2ClustersPerLevel1);
 		long expectedLevel1CentroidsLength = checked(manifest.Level1ClusterCount * manifest.PaddedDimension * sizeof(float));
 		long expectedLeafCentroidsLength = checked(leafCount * manifest.PaddedDimension * sizeof(float));
@@ -129,6 +165,11 @@ public sealed class HierarchicalArtifactSet : IDisposable {
 		if (leafPostingIds.Length != expectedLeafPostingIdsLength) {
 			throw new InvalidDataException(
 				$"Unexpected posting id file length. Expected {expectedLeafPostingIdsLength}, found {leafPostingIds.Length}.");
+		}
+
+		if ((leafWithoutHistoryCounts is not null) && (leafWithoutHistoryCounts.Length != (leafCount * sizeof(int)))) {
+			throw new InvalidDataException(
+				$"Unexpected last-transaction partition count file length. Expected {leafCount * sizeof(int)}, found {leafWithoutHistoryCounts.Length}.");
 		}
 	}
 }

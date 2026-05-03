@@ -25,7 +25,8 @@ public readonly record struct RuntimeSearchConfig(
 	DistanceMetric DistanceMetric,
 	IndexKind IndexKind,
 	int PaddedDimension,
-	int RerankCount);
+	int RerankCount,
+	bool UseLastTransactionPartitionPruning);
 
 public readonly record struct RuntimeHttpConfig(
 	ParserMode ParserMode,

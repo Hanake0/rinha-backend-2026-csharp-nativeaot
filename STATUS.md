@@ -32,7 +32,10 @@
 - current measured blocker:
   - search dominates the service-side tail under the real `900 req/s` constrained stack
 - next candidate branch:
-  - reduce candidate scan volume before touching transport or parser internals
+  - continue reducing candidate scan cost before touching transport or parser internals
+- latest completed experiment:
+  - last-transaction history partition pruning over IVF leaf postings
+  - result: preserved detection score and improved stack latency slightly, but did not beat the repo's best observed score
 
 ## Current default submission shape
 
@@ -106,6 +109,7 @@ See:
 
 - `benchmarks/results/stack/2026-05-03-stack-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
+- `benchmarks/results/stack/2026-05-03-last-transaction-partitioning.md`
 - `artifacts/compose-k6/k6-workdir/test/results.json`
 
 ## Current caveats

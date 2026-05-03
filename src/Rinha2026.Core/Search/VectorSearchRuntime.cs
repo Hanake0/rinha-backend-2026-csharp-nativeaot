@@ -54,7 +54,7 @@ public sealed class VectorSearchRuntime : IDisposable {
 		throw new InvalidOperationException("Search runtime was not initialized.");
 	}
 
-	public bool TryTrace(ReadOnlySpan<float> query, out HierarchicalSearchTrace trace) {
+	public bool TryTrace(ReadOnlySpan<float> query, int topK, out HierarchicalSearchTrace trace) {
 		if (this.hierarchicalEngine is null) {
 			trace = default;
 			return false;
@@ -64,7 +64,8 @@ public sealed class VectorSearchRuntime : IDisposable {
 			query,
 			this.searchConfig.BeamLevel1,
 			this.searchConfig.BeamLevel2,
-			this.searchConfig.RerankCount);
+			this.searchConfig.RerankCount,
+			topK);
 		return true;
 	}
 
@@ -81,7 +82,7 @@ public sealed class VectorSearchRuntime : IDisposable {
 
 	private static VectorSearchRuntime LoadHierarchical(RuntimeConfig runtimeConfig) {
 		HierarchicalArtifactSet artifacts = HierarchicalArtifactSet.Load(runtimeConfig.Dataset.IndexDirectory);
-		HierarchicalBeamSearchEngine engine = new(artifacts);
+		HierarchicalBeamSearchEngine engine = new(artifacts, runtimeConfig.Search.UseLastTransactionPartitionPruning);
 		return new VectorSearchRuntime(runtimeConfig.Search, artifacts, engine);
 	}
 }

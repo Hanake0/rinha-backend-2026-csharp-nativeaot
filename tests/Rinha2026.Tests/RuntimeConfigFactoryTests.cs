@@ -22,6 +22,7 @@ public sealed class RuntimeConfigFactoryTests {
 		Assert.Equal(10, runtimeConfig.Search.BeamLevel1);
 		Assert.Equal(32, runtimeConfig.Search.BeamLevel2);
 		Assert.Equal(48, runtimeConfig.Search.RerankCount);
+		Assert.True(runtimeConfig.Search.UseLastTransactionPartitionPruning);
 		Assert.Equal(6, runtimeConfig.Detection.ResponseCount);
 		Assert.False(runtimeConfig.Diagnostics.ProfileEnabled);
 		Assert.Equal(8192, runtimeConfig.Diagnostics.ProfileSampleCapacity);

@@ -42,6 +42,8 @@ public sealed class SearchSettings {
 	public int PaddedDimension { get; init; } = 16;
 
 	public int RerankCount { get; init; } = 48;
+
+	public bool UseLastTransactionPartitionPruning { get; init; } = true;
 }
 
 public sealed class HttpSettings {

@@ -25,7 +25,8 @@ internal static class TestApiFactory {
 				DistanceMetric: DistanceMetric.SquaredL2,
 				IndexKind: indexKind,
 				PaddedDimension: 16,
-				RerankCount: 48),
+				RerankCount: 48,
+				UseLastTransactionPartitionPruning: true),
 			new RuntimeHttpConfig(
 				ParserMode: parserMode,
 				ResponseMode: ResponseMode.PrecomputedTable,

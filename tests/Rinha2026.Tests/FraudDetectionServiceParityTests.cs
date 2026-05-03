@@ -83,7 +83,8 @@ public sealed class FraudDetectionServiceParityTests {
 				DistanceMetric: DistanceMetric.SquaredL2,
 				IndexKind: IndexKind.HierarchicalBeamIvf,
 				PaddedDimension: 16,
-				RerankCount: 68),
+				RerankCount: 68,
+				UseLastTransactionPartitionPruning: true),
 			new RuntimeHttpConfig(
 				ParserMode: parserMode,
 				ResponseMode: ResponseMode.PrecomputedTable,

@@ -50,7 +50,15 @@ internal static class HierarchicalIndexBuilder {
 			level2ClustersPerLevel1);
 
 		int[] postingOffsets = BuildPostingOffsets(leafCounts);
-		int[] orderedOriginalIds = BuildPostingIds(assignments, postingOffsets);
+		int[] leafWithoutHistoryCounts = new int[leafCounts.Length];
+		int[] orderedOriginalIds = options.UseLastTransactionPartitioning
+			? BuildPostingIdsWithHistoryPartition(
+				assignments,
+				postingOffsets,
+				leafWithoutHistoryCounts,
+				quantizedVectors.GetSpan(),
+				paddedDimension)
+			: BuildPostingIds(assignments, postingOffsets);
 		RewriteFlatArtifactsInLeafOrder(options.OutputDirectory, baseManifest, quantizedVectors, orderedOriginalIds);
 		int[] postingIds = BuildIdentityPostingIds(vectorCount);
 
@@ -71,6 +79,13 @@ internal static class HierarchicalIndexBuilder {
 			postingIds,
 			cancellationToken);
 
+		if (options.UseLastTransactionPartitioning) {
+			await WriteIntArrayAsync(
+				Path.Combine(options.OutputDirectory, "leaf.without-history.counts.bin"),
+				leafWithoutHistoryCounts,
+				cancellationToken);
+		}
+
 		return new IndexManifest {
 			Dimension = baseManifest.Dimension,
 			IndexKind = "HierarchicalBeamIvf",
@@ -80,6 +95,9 @@ internal static class HierarchicalIndexBuilder {
 			LeafCentroidFile = baseManifest.LeafCentroidFile,
 			LeafPostingIdsFile = baseManifest.LeafPostingIdsFile,
 			LeafPostingOffsetsFile = baseManifest.LeafPostingOffsetsFile,
+			LeafWithoutHistoryCountFile = options.UseLastTransactionPartitioning
+				? "leaf.without-history.counts.bin"
+				: string.Empty,
 			Level1CentroidFile = baseManifest.Level1CentroidFile,
 			Level1ClusterCount = level1ClusterCount,
 			Level2ClustersPerLevel1 = level2ClustersPerLevel1,
@@ -113,6 +131,39 @@ internal static class HierarchicalIndexBuilder {
 		for (int vectorIndex = 0; vectorIndex < assignments.Length; vectorIndex++) {
 			int leafId = assignments[vectorIndex];
 			postingIds[cursors[leafId]++] = vectorIndex;
+		}
+
+		return postingIds;
+	}
+
+	private static int[] BuildPostingIdsWithHistoryPartition(
+		ReadOnlySpan<int> assignments,
+		ReadOnlySpan<int> postingOffsets,
+		Span<int> leafWithoutHistoryCounts,
+		ReadOnlySpan<byte> quantizedVectors,
+		int paddedDimension) {
+		for (int vectorIndex = 0; vectorIndex < assignments.Length; vectorIndex++) {
+			if (IsWithoutHistoryVector(quantizedVectors, vectorIndex, paddedDimension)) {
+				leafWithoutHistoryCounts[assignments[vectorIndex]]++;
+			}
+		}
+
+		int[] postingIds = new int[assignments.Length];
+		int[] withoutHistoryCursors = postingOffsets.ToArray();
+		int[] withHistoryCursors = new int[postingOffsets.Length - 1];
+
+		for (int leafIndex = 0; leafIndex < withHistoryCursors.Length; leafIndex++) {
+			withHistoryCursors[leafIndex] = postingOffsets[leafIndex] + leafWithoutHistoryCounts[leafIndex];
+		}
+
+		for (int vectorIndex = 0; vectorIndex < assignments.Length; vectorIndex++) {
+			int leafId = assignments[vectorIndex];
+
+			if (IsWithoutHistoryVector(quantizedVectors, vectorIndex, paddedDimension)) {
+				postingIds[withoutHistoryCursors[leafId]++] = vectorIndex;
+			} else {
+				postingIds[withHistoryCursors[leafId]++] = vectorIndex;
+			}
 		}
 
 		return postingIds;
@@ -303,7 +354,16 @@ internal static class HierarchicalIndexBuilder {
 		int bitOffset = vectorIndex & 0b111;
 		return (labels[byteOffset] & (1 << bitOffset)) != 0;
 	}
-}
 
+	private static bool IsWithoutHistoryVector(
+		ReadOnlySpan<byte> quantizedVectors,
+		int vectorIndex,
+		int paddedDimension) {
+		int vectorOffset = checked(vectorIndex * paddedDimension);
+		ReadOnlySpan<sbyte> vector = MemoryMarshal.Cast<byte, sbyte>(
+			quantizedVectors.Slice(vectorOffset, paddedDimension));
+		return (vector[5] == -127) && (vector[6] == -127);
+	}
+}
 
 
