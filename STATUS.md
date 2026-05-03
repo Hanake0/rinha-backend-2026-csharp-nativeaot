@@ -26,7 +26,7 @@
 
 ## Current exploration stage
 
-- stage: `architecture pivot: custom lb + shared search service`
+- stage: `search tail reduction under the exact stable artifact family`
 - active objectives:
   - `FP = 0`
   - `FN = 0`
@@ -41,8 +41,10 @@
   - in-process artifact memory promotion
   - shared `searchd` pivot behind nginx
   - native AOT tcp L4 load balancer
+  - class-aware exact fraud-count search
 - next candidate branch:
-  - class-aware exact fraud-count search on top of the current artifact family
+  - lower-overhead HTTP server path to remove the remaining stack-visible transport cost
+  - selective hot-structure promotion that uses spare RAM without splitting the index per API
   - raw HTTP API server remains on the table because nginx is not the main gap
   - only revisit a custom LB if it is request-aware and it can prove a win under the same envelope
 
@@ -140,6 +142,11 @@
   - exactness stayed `0 / 0`
   - constrained compose regressed to `67.74 ms`, final `4169.15`
   - rejected because connection-level balancing introduced catastrophic queueing under keep-alive load
+- class-aware exact fraud-count branch:
+  - reformulated the query path around the final fraud-count decision for `topK = 5`
+  - evaluator remained exact across `rerankCount = 10, 12, 16, 20, 24, 32, 40, 48`
+  - best observed evaluator search latency still regressed to about `p99 = 1.53 ms`
+  - rejected because the extra frontier bookkeeping cost dominated any rerank reduction
 
 ## Latest profiling anchors
 
@@ -173,6 +180,7 @@
 - `benchmarks/results/stack/2026-05-03-memory-mode-promotion-summary.md`
 - `benchmarks/results/stack/2026-05-03-searchd-prototype-summary.md`
 - `benchmarks/results/stack/2026-05-03-native-lb-summary.md`
+- `benchmarks/results/stack/2026-05-03-class-aware-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-noavx.json`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-partition-on.json`
