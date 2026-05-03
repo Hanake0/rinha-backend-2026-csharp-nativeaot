@@ -166,6 +166,9 @@
   - current quick-screen anchor: nginx baseline `43.83 ms`, first request-aware LB over backend TCP `226.98 ms`, first request-aware LB over backend UDS `104.81 ms`, all exact at `0 / 0`
   - a follow-up pass pooled backend sockets across clients and improved the custom TCP branch to `108.82 ms`
   - pooled UDS pool-size sweeps found a best observed short-screen point of `86.51 ms` around pool size `64`, but still far behind nginx
+  - a ready-only isolation benchmark showed `nginx + kestrel = 0.49 ms` versus `custom LB + backend UDS + kestrel = 68.59 ms` at the same `900 req/s` pressure
+  - non-stripped NativeAOT symbol inspection shows the current LB binary is still dominated by async state-machine machinery in `HandleClientAsync`, `TryProxyRequestAsync`, `TryProxyResponseAsync`, `SendAllAsync`, and `RentAsync`
+  - conclusion: the current async LB implementation family is not salvageable into a winner; any future custom LB should switch to a different lower-level implementation family instead of micro-tweaking the same shape
 
 ## Latest profiling anchors
 

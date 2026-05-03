@@ -89,11 +89,49 @@ Dataset and runtime settings:
 - the best observed quick-screen point on this branch is still nowhere near the nginx quick baseline (`43.83 ms`)
 - this branch stays open only for deeper LB-path optimization or for reuse in later shared-search experiments
 
+## Ready-only isolation
+
+To isolate the LB from search and API work, a `/ready`-only compose benchmark was added.
+
+Observed result at `900 req/s`:
+
+- `nginx + kestrel`: `p99 = 0.49 ms`
+- custom LB + backend UDS + kestrel: `p99 = 68.59 ms`
+
+Interpretation:
+
+- the current custom LB family is fundamentally slower than `nginx` even when the backend does almost no useful work
+- this is not a search problem
+- this is not a JSON problem
+- this is a load-balancer implementation problem
+
+## Binary inspection
+
+A non-stripped linux-x64 NativeAOT publish of `Rinha2026.LoadBalancer` was inspected with `nm -C`.
+
+Relevant symbols include:
+
+- `RequestAwareLoadBalancer__HandleClientAsync_d__21__MoveNext`
+- `RequestAwareLoadBalancer__TryProxyRequestAsync_d__22__MoveNext`
+- `RequestAwareLoadBalancer__TryProxyResponseAsync_d__23__MoveNext`
+- `RequestAwareLoadBalancer__SendAllAsync_d__36__MoveNext`
+- `BackendConnectionPool__RentAsync_d__8__MoveNext`
+- `AwaitTaskContinuation`
+- `AsyncTaskMethodBuilder_1_AsyncStateMachineBox_1<...>`
+
+Interpretation:
+
+- the emitted binary still contains a large async state-machine surface in the LB hot path
+- the runtime evidence and the symbol evidence point the same way
+- the next serious LB attempt should replace this async implementation family, not keep sanding its edges
+
 ## Next justified steps
 
 1. use the quick harness first for LB and IPC hot-path edits
 2. only run the full official-style benchmark on branches that are at least neutral on the quick screen
 3. if the custom LB branch continues, focus on:
+   - a new non-async implementation family
+   - either `SocketAsyncEventArgs`/event-loop style C# or a lower-level native implementation
    - fewer copies in the LB request/response path
    - less buffer shuffling
    - cheaper backend response parsing
