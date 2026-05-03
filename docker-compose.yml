@@ -35,6 +35,7 @@ services:
       Runtime__Http__IoQueueCount: ${HTTP_IO_QUEUE_COUNT:-}
       Runtime__Http__NoDelay: ${HTTP_NO_DELAY:-}
       Runtime__Http__ParserMode: ${HTTP_PARSER_MODE:-Manual}
+      Runtime__Http__ServerMode: ${HTTP_SERVER_MODE:-Kestrel}
       Runtime__Http__UnsafePreferInlineScheduling: ${HTTP_INLINE_SCHEDULING:-}
       Runtime__Search__BeamLevel1: ${SEARCH_BEAM_LEVEL1:-8}
       Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-128}
@@ -71,6 +72,7 @@ services:
       Runtime__Http__IoQueueCount: ${HTTP_IO_QUEUE_COUNT:-}
       Runtime__Http__NoDelay: ${HTTP_NO_DELAY:-}
       Runtime__Http__ParserMode: ${HTTP_PARSER_MODE:-Manual}
+      Runtime__Http__ServerMode: ${HTTP_SERVER_MODE:-Kestrel}
       Runtime__Http__UnsafePreferInlineScheduling: ${HTTP_INLINE_SCHEDULING:-}
       Runtime__Search__BeamLevel1: ${SEARCH_BEAM_LEVEL1:-8}
       Runtime__Search__BeamLevel2: ${SEARCH_BEAM_LEVEL2:-128}
