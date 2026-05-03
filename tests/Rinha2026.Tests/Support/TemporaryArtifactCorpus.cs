@@ -17,7 +17,19 @@ internal sealed class TemporaryArtifactCorpus : IDisposable {
 	public string RootPath { get; }
 
 	public static async Task<TemporaryArtifactCorpus> CreateAsync(params (float[] Vector, string Label)[] records) {
+		IndexBuildOptions options = new() {
+			InputPath = string.Empty,
+			OutputDirectory = string.Empty,
+		};
+
+		return await CreateAsync(options, records);
+	}
+
+	public static async Task<TemporaryArtifactCorpus> CreateAsync(
+		IndexBuildOptions options,
+		params (float[] Vector, string Label)[] records) {
 		ArgumentNullException.ThrowIfNull(records);
+		ArgumentNullException.ThrowIfNull(options);
 
 		string rootPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
 		string inputPath = Path.Combine(rootPath, "references.json.gz");
@@ -26,12 +38,18 @@ internal sealed class TemporaryArtifactCorpus : IDisposable {
 
 		await WriteCompressedReferenceJsonAsync(inputPath, records);
 
-		IndexBuildOptions options = new() {
+		IndexBuildOptions effectiveOptions = new() {
+			Dimension = options.Dimension,
 			InputPath = inputPath,
+			KMeansIterations = options.KMeansIterations,
+			Level1ClusterCount = options.Level1ClusterCount,
+			Level2ClustersPerLevel1 = options.Level2ClustersPerLevel1,
 			OutputDirectory = indexDirectory,
+			PaddedDimension = options.PaddedDimension,
+			TrainingSampleSize = options.TrainingSampleSize,
 		};
 
-		await ReferenceCorpusBuilder.BuildAsync(options, CancellationToken.None);
+		await ReferenceCorpusBuilder.BuildAsync(effectiveOptions, CancellationToken.None);
 		return new TemporaryArtifactCorpus(rootPath, indexDirectory);
 	}
 

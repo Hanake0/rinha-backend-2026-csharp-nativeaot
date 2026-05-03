@@ -21,7 +21,11 @@ public sealed class ReferenceCorpusBuilderTests {
 
 			IndexBuildOptions options = new() {
 				InputPath = inputPath,
+				KMeansIterations = 2,
+				Level1ClusterCount = 2,
+				Level2ClustersPerLevel1 = 2,
 				OutputDirectory = outputDirectory,
+				TrainingSampleSize = 2,
 			};
 
 			IndexManifest manifest = await ReferenceCorpusBuilder.BuildAsync(options, CancellationToken.None);
@@ -33,12 +37,23 @@ public sealed class ReferenceCorpusBuilderTests {
 			string q8Path = Path.Combine(outputDirectory, manifest.QuantizedVectorFile);
 			string f16Path = Path.Combine(outputDirectory, manifest.RerankVectorFile);
 			string labelPath = Path.Combine(outputDirectory, manifest.LabelBitsetFile);
+			string level1CentroidPath = Path.Combine(outputDirectory, manifest.Level1CentroidFile);
+			string leafCentroidPath = Path.Combine(outputDirectory, manifest.LeafCentroidFile);
+			string postingOffsetsPath = Path.Combine(outputDirectory, manifest.LeafPostingOffsetsFile);
+			string postingIdsPath = Path.Combine(outputDirectory, manifest.LeafPostingIdsFile);
 			string manifestPath = Path.Combine(outputDirectory, "manifest.json");
 
 			Assert.True(File.Exists(manifestPath));
+			Assert.Equal("HierarchicalBeamIvf", manifest.IndexKind);
+			Assert.Equal(2, manifest.Level1ClusterCount);
+			Assert.Equal(2, manifest.Level2ClustersPerLevel1);
 			Assert.Equal(32, new FileInfo(q8Path).Length);
 			Assert.Equal(64, new FileInfo(f16Path).Length);
 			Assert.Equal(1, new FileInfo(labelPath).Length);
+			Assert.Equal(128, new FileInfo(level1CentroidPath).Length);
+			Assert.Equal(256, new FileInfo(leafCentroidPath).Length);
+			Assert.Equal(20, new FileInfo(postingOffsetsPath).Length);
+			Assert.Equal(8, new FileInfo(postingIdsPath).Length);
 
 			byte[] labels = await File.ReadAllBytesAsync(labelPath);
 			Assert.Equal(0b0000_0010, labels[0]);

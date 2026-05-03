@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 
 namespace Rinha2026.Core.Indexing;
 
@@ -26,6 +27,30 @@ public static class VectorEncoding {
 			destination[index] = unchecked((byte)quantized);
 		}
 	}
+
+	public static void EncodeQ8Symmetric(ReadOnlySpan<float> source, Span<sbyte> destination) {
+		if (destination.Length < source.Length) {
+			throw new ArgumentException("Destination span is too small for q8 encoding.", nameof(destination));
+		}
+
+		for (int index = 0; index < source.Length; index++) {
+			destination[index] = QuantizeQ8Symmetric(source[index]);
+		}
+	}
+
+	public static void DecodeQ8Symmetric(ReadOnlySpan<byte> source, Span<float> destination) {
+		if (destination.Length < source.Length) {
+			throw new ArgumentException("Destination span is too small for q8 decoding.", nameof(destination));
+		}
+
+		ReadOnlySpan<sbyte> signedSource = MemoryMarshal.Cast<byte, sbyte>(source);
+
+		for (int index = 0; index < signedSource.Length; index++) {
+			destination[index] = signedSource[index] / 127f;
+		}
+	}
+
+	public static float DequantizeQ8Symmetric(byte value) => unchecked((sbyte)value) / 127f;
 
 	public static sbyte QuantizeQ8Symmetric(float value) {
 		float clamped = Math.Clamp(value, -1f, 1f);

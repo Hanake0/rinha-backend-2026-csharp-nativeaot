@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 using Rinha2026.Core.Indexing;
 
 namespace Rinha2026.Core.Search;
@@ -50,15 +48,7 @@ public sealed class ExactFlatSearchEngine {
 	}
 
 	private static float ComputeSquaredL2(ReadOnlySpan<float> query, ReadOnlySpan<byte> encodedVector) {
-		ReadOnlySpan<Half> values = MemoryMarshal.Cast<byte, Half>(encodedVector);
-		float distance = 0f;
-
-		for (int dimension = 0; dimension < values.Length; dimension++) {
-			float difference = query[dimension] - (float)values[dimension];
-			distance += difference * difference;
-		}
-
-		return distance;
+		return DistanceComputations.SquaredL2F16(query, encodedVector);
 	}
 
 	private static void InsertSorted(Span<SearchHit> destination, ref int count, SearchHit candidate) {
