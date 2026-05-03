@@ -39,11 +39,11 @@
   - adaptive boundary rerank fallback promoted from `32 -> 48`
   - unix-domain-socket transport stack
   - in-process artifact memory promotion
+  - shared `searchd` pivot behind nginx
 - next candidate branch:
-  - rules-check a `lb + api1 + api2 + searchd` topology
-  - keep the APIs minimal and move the shared index into one process
-  - benchmark a purpose-built load balancer against nginx under the same envelope
-  - only keep the pivot if the extra hop buys back more latency than it costs
+  - custom LB against the current local-search APIs
+  - only revisit `searchd` if the frontend/search hop can be radically cheaper than the first socket prototype
+  - exact-search rewrites remain on the table because transport-only gains are still capped
 
 ## Current validated candidate shape
 
@@ -123,6 +123,12 @@
   - constrained compose regressed sharply to `2.04 ms`
   - `PromoteMetadataAndQuantizedVectors` regressed further to `3.22 ms`
   - rejected
+- shared `searchd` branch:
+  - rules are permissive enough for `lb + api1 + api2 + searchd`
+  - first prototype used `API(parse/vectorize) -> searchd(uds binary query)`
+  - exactness stayed `0 / 0`
+  - constrained compose regressed to `40.99 ms` and then `433.96 ms` on a frontend-heavier CPU split
+  - rejected in its current form
 
 ## Latest profiling anchors
 
@@ -149,6 +155,7 @@
 - `benchmarks/results/stack/2026-05-03-round4-stable-summary.md`
 - `benchmarks/results/stack/2026-05-03-adaptive-transport-memory-summary.md`
 - `benchmarks/results/stack/2026-05-03-memory-mode-promotion-summary.md`
+- `benchmarks/results/stack/2026-05-03-searchd-prototype-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-noavx.json`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-partition-on.json`
