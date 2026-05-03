@@ -24,6 +24,9 @@ services:
     container_name: rinha2026-api1
     environment:
       ASPNETCORE_URLS: http://+:9999
+      DOTNET_PROCESSOR_COUNT: ${DOTNET_PROCESSOR_COUNT:-}
+      DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS: ${DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS:-}
+      DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT: ${DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT:-}
       Runtime__Detection__ApprovalThreshold: ${APPROVAL_THRESHOLD:-0.6}
       Runtime__Detection__TopK: ${TOP_K:-5}
       Runtime__Dataset__IndexDirectory: ${RUNTIME_INDEX_DIRECTORY:-/app/data/index}
@@ -56,6 +59,9 @@ services:
     container_name: rinha2026-api2
     environment:
       ASPNETCORE_URLS: http://+:9999
+      DOTNET_PROCESSOR_COUNT: ${DOTNET_PROCESSOR_COUNT:-}
+      DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS: ${DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS:-}
+      DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT: ${DOTNET_SYSTEM_NET_SOCKETS_THREAD_COUNT:-}
       Runtime__Detection__ApprovalThreshold: ${APPROVAL_THRESHOLD:-0.6}
       Runtime__Detection__TopK: ${TOP_K:-5}
       Runtime__Dataset__IndexDirectory: ${RUNTIME_INDEX_DIRECTORY:-/app/data/index}
