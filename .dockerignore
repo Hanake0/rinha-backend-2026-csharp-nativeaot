@@ -1,5 +1,5 @@
-bin/
-obj/
+**/bin/
+**/obj/
 .git/
 .vs/
 .idea/
@@ -7,4 +7,6 @@ artifacts/
 BenchmarkDotNet.Artifacts/
 TestResults/
 runtime-data/
+runtime-data-*/
 plans/
+benchmarks/results/
