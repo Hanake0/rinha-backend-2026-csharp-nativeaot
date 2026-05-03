@@ -6,7 +6,9 @@ using System.Text;
 
 await using RequestAwareLoadBalancer loadBalancer = RequestAwareLoadBalancer.Create(
 	Environment.GetEnvironmentVariable("ASPNETCORE_URLS"),
-	Environment.GetEnvironmentVariable("BACKEND_ENDPOINTS"));
+	Environment.GetEnvironmentVariable("BACKEND_ENDPOINTS"),
+	Environment.GetEnvironmentVariable("BACKEND_POOL_SIZE"),
+	Environment.GetEnvironmentVariable("BACKEND_PREWARM_CONNECTIONS"));
 await loadBalancer.RunAsync();
 
 internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
@@ -14,8 +16,9 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 	private const int MaxHeaderBytes = 8 * 1024;
 
 	private readonly ConcurrentDictionary<int, Task> connectionTasks = new();
+	private readonly int backendPoolPrewarmCount;
+	private readonly BackendConnectionPool[] backendPools;
 	private readonly Socket listener;
-	private readonly BackendEndpoint[] backends;
 	private readonly byte[] badGatewayResponse = BuildResponse("502 Bad Gateway");
 	private readonly byte[] badRequestResponse = BuildResponse("400 Bad Request");
 	private Task? acceptLoopTask;
@@ -24,8 +27,9 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 	private int nextBackendIndex;
 	private int nextConnectionId;
 
-	private RequestAwareLoadBalancer(int listenPort, BackendEndpoint[] backends) {
-		this.backends = backends;
+	private RequestAwareLoadBalancer(int listenPort, BackendConnectionPool[] backendPools, int backendPoolPrewarmCount) {
+		this.backendPools = backendPools;
+		this.backendPoolPrewarmCount = backendPoolPrewarmCount;
 		this.listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp) {
 			NoDelay = true,
 		};
@@ -33,9 +37,18 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 		this.listener.Listen(backlog: 512);
 	}
 
-	public static RequestAwareLoadBalancer Create(string? urls, string? backendEndpoints) {
+	public static RequestAwareLoadBalancer Create(
+		string? urls,
+		string? backendEndpoints,
+		string? backendPoolSizeValue,
+		string? backendPrewarmConnectionsValue) {
 		BackendEndpoint[] backends = ParseBackends(backendEndpoints);
-		return new RequestAwareLoadBalancer(ResolveListenPort(urls), backends);
+		int backendPoolSize = ParsePositiveInt32OrDefault(backendPoolSizeValue, fallback: 32);
+		int backendPoolPrewarmCount = ParsePositiveInt32OrDefault(backendPrewarmConnectionsValue, fallback: Math.Min(backendPoolSize, 16));
+		return new RequestAwareLoadBalancer(
+			ResolveListenPort(urls),
+			BuildBackendPools(backends, backendPoolSize),
+			backendPoolPrewarmCount);
 	}
 
 	public async ValueTask DisposeAsync() {
@@ -44,6 +57,11 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 		}
 
 		await this.StopAsync();
+
+		foreach (BackendConnectionPool backendPool in this.backendPools) {
+			backendPool.Dispose();
+		}
+
 		this.listener.Dispose();
 		this.disposed = true;
 	}
@@ -53,16 +71,16 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 		await (this.acceptLoopTask ?? Task.CompletedTask);
 	}
 
-	public Task StartAsync(CancellationToken cancellationToken = default) {
+	public async Task StartAsync(CancellationToken cancellationToken = default) {
 		ObjectDisposedException.ThrowIf(this.disposed, this);
 
 		if (this.acceptLoopTask is not null) {
-			return Task.CompletedTask;
+			return;
 		}
 
 		this.cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+		await this.PrewarmBackendPoolsAsync(this.cancellationTokenSource.Token);
 		this.acceptLoopTask = this.AcceptLoopAsync(this.cancellationTokenSource.Token);
-		return Task.CompletedTask;
 	}
 
 	public async Task StopAsync() {
@@ -139,7 +157,6 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 	private async Task HandleClientAsync(Socket clientSocket, CancellationToken cancellationToken) {
 		byte[] clientBuffer = ArrayPool<byte>.Shared.Rent(ReceiveBufferSize);
 		int bufferedClientBytes = 0;
-		BackendConnection?[] backendConnections = new BackendConnection?[this.backends.Length];
 
 		try {
 			while (!cancellationToken.IsCancellationRequested) {
@@ -171,16 +188,8 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 					}
 
 					int backendIndex = this.SelectBackendIndex();
-					BackendConnection backendConnection = await GetOrConnectBackendAsync(
-						backendConnections,
-						backendIndex,
-						this.backends[backendIndex],
-						cancellationToken);
-
 					if (!await this.TryProxyRequestAsync(
-						backendConnections,
 						backendIndex,
-						backendConnection,
 						clientSocket,
 						clientBuffer.AsMemory(0, consumedBytes),
 						cancellationToken)) {
@@ -198,31 +207,39 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 			}
 		} finally {
 			ArrayPool<byte>.Shared.Return(clientBuffer);
-
-			foreach (BackendConnection? backendConnection in backendConnections) {
-				backendConnection?.Dispose();
-			}
 		}
 	}
 
 	private async Task<bool> TryProxyRequestAsync(
-		BackendConnection?[] backendConnections,
 		int backendIndex,
-		BackendConnection backendConnection,
 		Socket clientSocket,
 		ReadOnlyMemory<byte> requestPayload,
 		CancellationToken cancellationToken) {
+		BackendConnectionPool backendPool = this.backendPools[backendIndex];
+
 		for (int attempt = 0; attempt < 2; attempt++) {
+			BackendConnection? backendConnection = null;
+
 			try {
+				backendConnection = await backendPool.RentAsync(cancellationToken);
 				await SendAllAsync(backendConnection.Socket, requestPayload, cancellationToken);
-				return await this.TryProxyResponseAsync(backendConnection, clientSocket, cancellationToken);
+
+				if (!await this.TryProxyResponseAsync(backendConnection, clientSocket, cancellationToken)) {
+					backendPool.Discard(backendConnection);
+					backendConnection = null;
+					continue;
+				}
+
+				backendPool.Return(backendConnection);
+				return true;
 			} catch (IOException) {
 			} catch (SocketException) {
 			} catch (ObjectDisposedException) {
 			}
 
-			backendConnection.Dispose();
-			backendConnection = await ReconnectBackendAsync(backendConnections, backendIndex, this.backends[backendIndex], cancellationToken);
+			if (backendConnection is not null) {
+				backendPool.Discard(backendConnection);
+			}
 		}
 
 		await SendAllAsync(clientSocket, this.badGatewayResponse, cancellationToken);
@@ -273,34 +290,21 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 
 	private int SelectBackendIndex() {
 		uint index = unchecked((uint)Interlocked.Increment(ref this.nextBackendIndex));
-		return (int)(index % (uint)this.backends.Length);
+		return (int)(index % (uint)this.backendPools.Length);
 	}
 
-	private static async Task<BackendConnection> GetOrConnectBackendAsync(
-		BackendConnection?[] backendConnections,
-		int backendIndex,
-		BackendEndpoint backend,
-		CancellationToken cancellationToken) {
-		BackendConnection? existing = backendConnections[backendIndex];
-
-		if (existing is not null) {
-			return existing;
+	private async Task PrewarmBackendPoolsAsync(CancellationToken cancellationToken) {
+		if (this.backendPoolPrewarmCount <= 0) {
+			return;
 		}
 
-		BackendConnection connection = await BackendConnection.ConnectAsync(backend, cancellationToken);
-		backendConnections[backendIndex] = connection;
-		return connection;
-	}
+		Task[] prewarmTasks = new Task[this.backendPools.Length];
 
-	private static async Task<BackendConnection> ReconnectBackendAsync(
-		BackendConnection?[] backendConnections,
-		int backendIndex,
-		BackendEndpoint backend,
-		CancellationToken cancellationToken) {
-		backendConnections[backendIndex]?.Dispose();
-		BackendConnection connection = await BackendConnection.ConnectAsync(backend, cancellationToken);
-		backendConnections[backendIndex] = connection;
-		return connection;
+		for (int index = 0; index < this.backendPools.Length; index++) {
+			prewarmTasks[index] = this.backendPools[index].PrewarmAsync(this.backendPoolPrewarmCount, cancellationToken);
+		}
+
+		await Task.WhenAll(prewarmTasks);
 	}
 
 	private static byte[] BuildResponse(string status) {
@@ -405,6 +409,16 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 		return backends;
 	}
 
+	private static BackendConnectionPool[] BuildBackendPools(ReadOnlySpan<BackendEndpoint> backends, int backendPoolSize) {
+		BackendConnectionPool[] backendPools = new BackendConnectionPool[backends.Length];
+
+		for (int index = 0; index < backends.Length; index++) {
+			backendPools[index] = new BackendConnectionPool(backends[index], backendPoolSize);
+		}
+
+		return backendPools;
+	}
+
 	private static int? ParsePositiveInt32(ReadOnlySpan<byte> value) {
 		if (value.IsEmpty) {
 			return null;
@@ -420,6 +434,15 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 			}
 
 			parsedValue = checked((parsedValue * 10) + digit);
+		}
+
+		return parsedValue;
+	}
+
+	private static int ParsePositiveInt32OrDefault(string? value, int fallback) {
+		if (!int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int parsedValue) ||
+			(parsedValue <= 0)) {
+			return fallback;
 		}
 
 		return parsedValue;
@@ -569,6 +592,86 @@ internal sealed class RequestAwareLoadBalancer : IAsyncDisposable {
 	private enum BackendEndpointKind {
 		Tcp = 0,
 		UnixDomainSocket = 1,
+	}
+
+	private sealed class BackendConnectionPool : IDisposable {
+		private readonly ConcurrentQueue<BackendConnection> idleConnections = new();
+		private readonly BackendEndpoint endpoint;
+		private readonly SemaphoreSlim idleConnectionSignal = new(initialCount: 0);
+		private readonly int maxConnectionCount;
+		private bool disposed;
+		private int openConnectionCount;
+
+		public BackendConnectionPool(BackendEndpoint endpoint, int maxConnectionCount) {
+			this.endpoint = endpoint;
+			this.maxConnectionCount = maxConnectionCount;
+		}
+
+		public async Task PrewarmAsync(int connectionCount, CancellationToken cancellationToken) {
+			List<BackendConnection> warmedConnections = new(Math.Min(connectionCount, this.maxConnectionCount));
+
+			try {
+				int targetConnectionCount = Math.Min(connectionCount, this.maxConnectionCount);
+
+				for (int index = 0; index < targetConnectionCount; index++) {
+					warmedConnections.Add(await this.RentAsync(cancellationToken));
+				}
+			} finally {
+				foreach (BackendConnection warmedConnection in warmedConnections) {
+					this.Return(warmedConnection);
+				}
+			}
+		}
+
+		public async Task<BackendConnection> RentAsync(CancellationToken cancellationToken) {
+			ObjectDisposedException.ThrowIf(this.disposed, this);
+
+			while (true) {
+				if (this.idleConnections.TryDequeue(out BackendConnection? connection)) {
+					return connection;
+				}
+
+				int currentOpenConnectionCount = Volatile.Read(ref this.openConnectionCount);
+
+				if ((currentOpenConnectionCount < this.maxConnectionCount) &&
+					(Interlocked.CompareExchange(ref this.openConnectionCount, currentOpenConnectionCount + 1, currentOpenConnectionCount) == currentOpenConnectionCount)) {
+					try {
+						return await BackendConnection.ConnectAsync(this.endpoint, cancellationToken);
+					} catch {
+						Interlocked.Decrement(ref this.openConnectionCount);
+						throw;
+					}
+				}
+
+				await this.idleConnectionSignal.WaitAsync(cancellationToken);
+			}
+		}
+
+		public void Return(BackendConnection connection) {
+			ObjectDisposedException.ThrowIf(this.disposed, this);
+			connection.BufferedBytes = 0;
+			this.idleConnections.Enqueue(connection);
+			this.idleConnectionSignal.Release();
+		}
+
+		public void Discard(BackendConnection connection) {
+			connection.Dispose();
+			Interlocked.Decrement(ref this.openConnectionCount);
+		}
+
+		public void Dispose() {
+			if (this.disposed) {
+				return;
+			}
+
+			this.disposed = true;
+
+			while (this.idleConnections.TryDequeue(out BackendConnection? idleConnection)) {
+				idleConnection.Dispose();
+			}
+
+			this.idleConnectionSignal.Dispose();
+		}
 	}
 
 	private sealed class BackendConnection : IDisposable {
