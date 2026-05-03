@@ -40,10 +40,11 @@
   - unix-domain-socket transport stack
   - in-process artifact memory promotion
   - shared `searchd` pivot behind nginx
+  - native AOT tcp L4 load balancer
 - next candidate branch:
-  - custom LB against the current local-search APIs
-  - only revisit `searchd` if the frontend/search hop can be radically cheaper than the first socket prototype
-  - exact-search rewrites remain on the table because transport-only gains are still capped
+  - class-aware exact fraud-count search on top of the current artifact family
+  - raw HTTP API server remains on the table because nginx is not the main gap
+  - only revisit a custom LB if it is request-aware and it can prove a win under the same envelope
 
 ## Current validated candidate shape
 
@@ -108,6 +109,11 @@
   - `p99 = 1.35 ms`
   - detection `0 / 0`
   - final score `5869.95`
+- latest reproduced stable baseline:
+  - same corrected stable family and CPU split
+  - `p99 = 1.43 ms`
+  - detection `0 / 0`
+  - final score `5845.68`
 - rejected AVX branch:
   - evaluator stayed exact
   - compose degraded to `1.47 ms`, final `5832.55`
@@ -129,6 +135,11 @@
   - exactness stayed `0 / 0`
   - constrained compose regressed to `40.99 ms` and then `433.96 ms` on a frontend-heavier CPU split
   - rejected in its current form
+- native L4 LB branch:
+  - first prototype used a native AOT tcp proxy with round-robin backend assignment per client connection
+  - exactness stayed `0 / 0`
+  - constrained compose regressed to `67.74 ms`, final `4169.15`
+  - rejected because connection-level balancing introduced catastrophic queueing under keep-alive load
 
 ## Latest profiling anchors
 
@@ -136,6 +147,11 @@
   - API1 total `p99 ~ 787.3 us`
   - API2 total `p99 ~ 925.4 us`
   - search remains the dominant in-service stage
+- corrected stable path, latest full-load profile rerun:
+  - API1 total `p99 = 838.3 us`, search `p99 = 783.1 us`
+  - API2 total `p99 = 955.1 us`, search `p99 = 882.3 us`
+  - body read + parse + vectorize stayed below `15 us` at `p99`
+  - response write stayed below `68 us` at `p99`
 - direct-vs-lb anchor:
   - earlier direct dual-target replay landed around `1.28 ms`
   - current nginx stack lands around `1.36 ms`
@@ -156,6 +172,7 @@
 - `benchmarks/results/stack/2026-05-03-adaptive-transport-memory-summary.md`
 - `benchmarks/results/stack/2026-05-03-memory-mode-promotion-summary.md`
 - `benchmarks/results/stack/2026-05-03-searchd-prototype-summary.md`
+- `benchmarks/results/stack/2026-05-03-native-lb-summary.md`
 - `benchmarks/results/stack/2026-05-03-profile-breakdown.md`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-noavx.json`
 - `artifacts/evaluator-round4-hierarchical-f32-stable-partition-on.json`
