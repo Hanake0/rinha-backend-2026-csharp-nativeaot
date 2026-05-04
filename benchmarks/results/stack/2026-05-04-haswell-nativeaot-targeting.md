@@ -50,6 +50,41 @@ Intel ARK for this CPU family explicitly shows these extension families on the p
 - `AVX2`
 - `AES-NI`
 
+### Exact Linux flag dump from the target machine
+
+The organizer-provided machine dump for the target CPU confirms this exact model and these flags:
+
+- `model name = Intel(R) Core(TM) i5-4278U CPU @ 2.60GHz`
+- `family = 6`
+- `model = 69`
+- `stepping = 1`
+
+Relevant flags for our workload:
+
+- `mmx`
+- `sse`
+- `sse2`
+- `pni` (`sse3`)
+- `ssse3`
+- `sse4_1`
+- `sse4_2`
+- `pclmulqdq`
+- `aes`
+- `avx`
+- `avx2`
+- `fma`
+- `f16c`
+- `movbe`
+- `popcnt`
+- `abm` (`lzcnt` class behavior)
+- `bmi1`
+- `bmi2`
+- `rdrand`
+- `fsgsbase`
+- `erms`
+- `invpcid`
+- `xsaveopt`
+
 Important nuance:
 
 - Intel ARK's "Instruction Set Extensions" field is abbreviated and does not enumerate every CPUID feature the compiler may care about
@@ -72,6 +107,42 @@ Features associated with that profile include:
 - `POPCNT`
 
 These are not all explicitly enumerated on the public ARK summary, but they are the reason `x86-64-v3` is the practical compiler target for this machine class.
+
+### Exact `x86-64-v3` delta versus the target dump
+
+`x86-64-v3` covers the important compute-side part of the target machine:
+
+- `sse4_1`
+- `sse4_2`
+- `avx`
+- `avx2`
+- `f16c`
+- `fma`
+- `bmi1`
+- `bmi2`
+- `lzcnt`
+- `movbe`
+- `popcnt`
+
+Useful target-CPU flags that are outside the `x86-64-v3` baseline:
+
+- `aes`
+- `pclmulqdq`
+- `rdrand`
+- `fsgsbase`
+- `erms`
+- `invpcid`
+- `xsaveopt`
+
+For our current NativeAOT build, the only safe and relevant extra `ilc` switch we explicitly layer on top today is:
+
+- `aes`
+
+Notes:
+
+- current `ilc` clearly supports `aes`
+- current `ilc` does not clearly expose a standalone `pclmulqdq` token in its help output, even though older docs/examples mention `pclmul`
+- several other flags in the CPU dump are platform/runtime features rather than useful app-code generation knobs for this workload
 
 ### Why this distinction matters
 
@@ -108,7 +179,7 @@ Effects of the untuned baseline:
 The API Dockerfiles now set:
 
 - `RinhaOptimizationPreference=Speed`
-- `RinhaIlcInstructionSet=x86-64-v3`
+- `RinhaIlcInstructionSet=x86-64-v3,aes`
 - `RinhaIlcMaxVectorTBitWidth=256`
 
 This does two useful things:
@@ -120,7 +191,8 @@ This does two useful things:
 
 Using the local official-style compose benchmark with the stable dataset and official `test.js` / `test-data.json`:
 
-- `p99 = 0.79 ms`
+- `run 1 p99 = 0.67 ms`
+- `run 2 p99 = 0.67 ms`
 - `false positives = 0`
 - `false negatives = 0`
 - `http errors = 0`
@@ -164,7 +236,7 @@ Opportunity:
 - add explicit `Avx` / `Fma` kernels for the fixed 16-float case
 - use 256-bit loads and fused multiply-add accumulation
 
-### 2. F16 path does not exploit F16C
+### 2. F16 path still does not use a direct F16C conversion intrinsic
 
 File:
 
@@ -172,12 +244,13 @@ File:
 
 Current state:
 
-- `SquaredL2F16Fixed16()` expands every half value through the lookup table and does scalar math
+- `SquaredL2F16Fixed16()` still expands every half value through the lookup table
+- we now at least use AVX/FMA for the accumulation step after decoding
 
 Opportunity:
 
-- add an `F16C` conversion path for fixed-width half vectors
-- convert packed half values to floats in registers and then use `Avx` / `Fma`
+- if/when the relevant `F16C` conversion intrinsic is cleanly available in our .NET surface, replace lookup-table decode with direct packed half-to-float conversion
+- keep the current AVX/FMA accumulation path either way
 
 ### 3. Q8 path is vectorized only for one exact shape
 
