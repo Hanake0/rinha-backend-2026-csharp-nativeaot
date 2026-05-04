@@ -1,6 +1,9 @@
 FROM alpine:3.22 AS build
 WORKDIR /src
 
+ARG ILC_INSTRUCTION_SET=avx2,bmi2,fma,pclmul,popcnt,aes
+ARG ILC_MAX_VECTOR_T_BIT_WIDTH=256
+
 RUN apk add --no-cache bash curl ca-certificates clang lld build-base zlib-dev icu-libs
 
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
@@ -15,7 +18,10 @@ RUN dotnet publish src/Rinha2026.Api/Rinha2026.Api.csproj \
     -r linux-musl-x64 \
     -o /out/api \
     --self-contained true \
+    -p:OptimizationPreference=Speed \
     -p:PublishAot=true \
+    -p:IlcInstructionSet=${ILC_INSTRUCTION_SET} \
+    -p:IlcMaxVectorTBitWidth=${ILC_MAX_VECTOR_T_BIT_WIDTH} \
     -p:StaticExecutable=true \
     -p:StripSymbols=true
 
