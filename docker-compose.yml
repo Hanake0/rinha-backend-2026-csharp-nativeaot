@@ -1,6 +1,7 @@
 services:
   lb:
     image: nginx:1.27-alpine
+    pull_policy: always
     platform: linux/amd64
     container_name: rinha2026-lb
     ports:
@@ -20,6 +21,7 @@ services:
 
   api1:
     image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-d5b886c
+    pull_policy: always
     platform: linux/amd64
     container_name: rinha2026-api1
     environment:
@@ -52,6 +54,7 @@ services:
 
   api2:
     image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-d5b886c
+    pull_policy: always
     platform: linux/amd64
     container_name: rinha2026-api2
     environment:
