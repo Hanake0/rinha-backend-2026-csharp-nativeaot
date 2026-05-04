@@ -117,7 +117,7 @@ public sealed class FraudDetectionServiceParityTests {
 		bool useLeafRadiusPruning = false,
 		bool useLastTransactionPartitionPruning = true) {
 		string repoRoot = GetRepoRoot();
-		string runtimeDataRoot = Path.Combine(repoRoot, runtimeDataDirectoryName);
+		string runtimeDataRoot = ResolveRuntimeDataRoot(repoRoot, runtimeDataDirectoryName);
 
 		return new RuntimeConfig(
 			new RuntimeDetectionConfig(TopK: 5, ApprovalThreshold: 0.6d),
@@ -179,6 +179,21 @@ public sealed class FraudDetectionServiceParityTests {
 		}
 
 		throw new DirectoryNotFoundException("Could not locate the repository root from the test output directory.");
+	}
+
+	private static string ResolveRuntimeDataRoot(string repoRoot, string runtimeDataDirectoryName) {
+		string[] candidates = [
+			Path.Combine(repoRoot, runtimeDataDirectoryName),
+			Path.Combine(repoRoot, "..", "rinha-2026-csharp-nativeaot", runtimeDataDirectoryName),
+		];
+
+		foreach (string candidate in candidates) {
+			if (File.Exists(Path.Combine(candidate, "normalization.json"))) {
+				return candidate;
+			}
+		}
+
+		return candidates[0];
 	}
 
 	private static WebApplicationFactory<Program> CreateFactory(RuntimeConfig runtimeConfig) {
