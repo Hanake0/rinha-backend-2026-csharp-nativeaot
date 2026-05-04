@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 
 using Rinha2026.Core.Indexing;
+using Rinha2026.Core.Search;
 
 namespace Rinha2026.IndexBuilder.Build;
 
@@ -459,13 +460,6 @@ internal static class HierarchicalIndexBuilder {
 	}
 
 	private static int ComputeSquaredL2Q8(ReadOnlySpan<sbyte> left, ReadOnlySpan<sbyte> right) {
-		int distance = 0;
-
-		for (int dimension = 0; dimension < left.Length; dimension++) {
-			int difference = left[dimension] - right[dimension];
-			distance += difference * difference;
-		}
-
-		return distance;
+		return DistanceComputations.SquaredL2Q8(left, right);
 	}
 }

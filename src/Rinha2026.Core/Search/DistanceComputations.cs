@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -6,11 +7,16 @@ using System.Runtime.Intrinsics.X86;
 namespace Rinha2026.Core.Search;
 
 public static class DistanceComputations {
+	private const int FixedDimension = 16;
 	private static readonly float[] HalfToSingleLookup = CreateHalfToSingleLookup();
 
 	public static float SquaredL2(ReadOnlySpan<float> left, ReadOnlySpan<float> right) {
 		if (left.Length != right.Length) {
 			throw new ArgumentException("Vector dimensions must match.");
+		}
+
+		if (Avx.IsSupported && (left.Length == FixedDimension)) {
+			return SquaredL2Fixed16Vectorized(left, right);
 		}
 
 		int index = 0;
@@ -44,7 +50,7 @@ public static class DistanceComputations {
 			throw new ArgumentException("Vector dimensions must match.");
 		}
 
-		if (values.Length == 16) {
+		if (values.Length == FixedDimension) {
 			return SquaredL2F16Fixed16(query, values);
 		}
 
@@ -65,7 +71,7 @@ public static class DistanceComputations {
 			throw new ArgumentException("Vector dimensions must match.");
 		}
 
-		if (vector.Length == 16) {
+		if (vector.Length == FixedDimension) {
 			return SquaredL2F32Fixed16(query, vector);
 		}
 
@@ -78,7 +84,7 @@ public static class DistanceComputations {
 	}
 
 	public static int SquaredL2Q8(ReadOnlySpan<sbyte> query, ReadOnlySpan<sbyte> vector) {
-		if (Avx2.IsSupported && (vector.Length == 16) && (query.Length >= 16)) {
+		if (Avx2.IsSupported && (query.Length >= vector.Length) && (vector.Length >= FixedDimension)) {
 			return SquaredL2Q8Vectorized(query, vector);
 		}
 
@@ -92,29 +98,34 @@ public static class DistanceComputations {
 		return distance;
 	}
 	private static int SquaredL2Q8Vectorized(ReadOnlySpan<sbyte> query, ReadOnlySpan<sbyte> vector) {
+		int total = 0;
+		int dimension = 0;
 		ref sbyte queryRef = ref MemoryMarshal.GetReference(query);
 		ref sbyte vectorRef = ref MemoryMarshal.GetReference(vector);
 
-		Vector128<sbyte> queryBytes = Vector128.LoadUnsafe(ref queryRef);
-		Vector128<sbyte> vectorBytes = Vector128.LoadUnsafe(ref vectorRef);
-		Vector256<short> queryShorts = Avx2.ConvertToVector256Int16(queryBytes);
-		Vector256<short> vectorShorts = Avx2.ConvertToVector256Int16(vectorBytes);
-		Vector256<short> diff = Avx2.Subtract(queryShorts, vectorShorts);
-		Vector256<int> squares = Avx2.MultiplyAddAdjacent(diff, diff);
+		for (; dimension <= (vector.Length - FixedDimension); dimension += FixedDimension) {
+			Vector128<sbyte> queryBytes = Vector128.LoadUnsafe(ref Unsafe.Add(ref queryRef, dimension));
+			Vector128<sbyte> vectorBytes = Vector128.LoadUnsafe(ref Unsafe.Add(ref vectorRef, dimension));
+			Vector256<short> queryShorts = Avx2.ConvertToVector256Int16(queryBytes);
+			Vector256<short> vectorShorts = Avx2.ConvertToVector256Int16(vectorBytes);
+			Vector256<short> diff = Avx2.Subtract(queryShorts, vectorShorts);
+			Vector256<int> squares = Avx2.MultiplyAddAdjacent(diff, diff);
+			total += SumVector256(squares);
+		}
 
-		Span<int> lanes = stackalloc int[Vector256<int>.Count];
-		squares.CopyTo(lanes);
-
-		int total = 0;
-
-		for (int index = 0; index < lanes.Length; index++) {
-			total += lanes[index];
+		for (; dimension < vector.Length; dimension++) {
+			int difference = query[dimension] - vector[dimension];
+			total += difference * difference;
 		}
 
 		return total;
 	}
 
 	private static float SquaredL2F16Fixed16(ReadOnlySpan<float> query, ReadOnlySpan<ushort> values) {
+		if (Avx.IsSupported) {
+			return SquaredL2F16Fixed16Vectorized(query, values);
+		}
+
 		float d0 = query[0] - HalfToSingleLookup[values[0]];
 		float d1 = query[1] - HalfToSingleLookup[values[1]];
 		float d2 = query[2] - HalfToSingleLookup[values[2]];
@@ -152,6 +163,10 @@ public static class DistanceComputations {
 	}
 
 	private static float SquaredL2F32Fixed16(ReadOnlySpan<float> query, ReadOnlySpan<float> vector) {
+		if (Avx.IsSupported) {
+			return SquaredL2Fixed16Vectorized(query, vector);
+		}
+
 		float d0 = query[0] - vector[0];
 		float d1 = query[1] - vector[1];
 		float d2 = query[2] - vector[2];
@@ -186,6 +201,61 @@ public static class DistanceComputations {
 			(d13 * d13) +
 			(d14 * d14) +
 			(d15 * d15);
+	}
+
+	private static float SquaredL2F16Fixed16Vectorized(ReadOnlySpan<float> query, ReadOnlySpan<ushort> values) {
+		Span<float> decoded = stackalloc float[FixedDimension];
+
+		for (int dimension = 0; dimension < FixedDimension; dimension++) {
+			decoded[dimension] = HalfToSingleLookup[values[dimension]];
+		}
+
+		return SquaredL2Fixed16Vectorized(query, decoded);
+	}
+
+	private static float SquaredL2Fixed16Vectorized(ReadOnlySpan<float> query, ReadOnlySpan<float> vector) {
+		ref float queryRef = ref MemoryMarshal.GetReference(query);
+		ref float vectorRef = ref MemoryMarshal.GetReference(vector);
+
+		Vector256<float> queryLow = Vector256.LoadUnsafe(ref queryRef);
+		Vector256<float> queryHigh = Vector256.LoadUnsafe(ref Unsafe.Add(ref queryRef, 8));
+		Vector256<float> vectorLow = Vector256.LoadUnsafe(ref vectorRef);
+		Vector256<float> vectorHigh = Vector256.LoadUnsafe(ref Unsafe.Add(ref vectorRef, 8));
+		Vector256<float> lowDiff = Avx.Subtract(queryLow, vectorLow);
+		Vector256<float> highDiff = Avx.Subtract(queryHigh, vectorHigh);
+		Vector256<float> squares = Fma.IsSupported
+			? Fma.MultiplyAdd(lowDiff, lowDiff, Avx.Multiply(highDiff, highDiff))
+			: Avx.Add(Avx.Multiply(lowDiff, lowDiff), Avx.Multiply(highDiff, highDiff));
+
+		return SumVector256(squares);
+	}
+
+	private static int SumVector256(Vector256<int> value) {
+		Vector128<int> sum128 = Sse2.Add(value.GetLower(), value.GetUpper());
+
+		if (Ssse3.IsSupported) {
+			sum128 = Ssse3.HorizontalAdd(sum128, sum128);
+			sum128 = Ssse3.HorizontalAdd(sum128, sum128);
+			return sum128.ToScalar();
+		}
+
+		Span<int> lanes = stackalloc int[Vector128<int>.Count];
+		sum128.CopyTo(lanes);
+		return lanes[0] + lanes[1] + lanes[2] + lanes[3];
+	}
+
+	private static float SumVector256(Vector256<float> value) {
+		Vector128<float> sum128 = Sse.Add(value.GetLower(), value.GetUpper());
+
+		if (Sse3.IsSupported) {
+			sum128 = Sse3.HorizontalAdd(sum128, sum128);
+			sum128 = Sse3.HorizontalAdd(sum128, sum128);
+			return sum128.ToScalar();
+		}
+
+		Span<float> lanes = stackalloc float[Vector128<float>.Count];
+		sum128.CopyTo(lanes);
+		return lanes[0] + lanes[1] + lanes[2] + lanes[3];
 	}
 
 	private static float[] CreateHalfToSingleLookup() {
