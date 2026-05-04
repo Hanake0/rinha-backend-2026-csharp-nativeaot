@@ -81,6 +81,7 @@ for ($runIndex = 1; $runIndex -le $Repetitions; $runIndex++) {
 	New-Item -ItemType Directory -Path (Join-Path $k6Workdir "test") -Force | Out-Null
 	Copy-Item -LiteralPath $testScriptPath -Destination (Join-Path $k6Workdir "test.js") -Force
 	Copy-Item -LiteralPath $testDataPath -Destination (Join-Path $k6Workdir "test-data.json") -Force
+	chmod -R 0777 $k6Workdir
 
 	& docker @composeArguments down --remove-orphans
 
