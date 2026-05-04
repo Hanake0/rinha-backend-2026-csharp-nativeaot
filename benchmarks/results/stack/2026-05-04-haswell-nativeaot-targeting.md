@@ -37,12 +37,30 @@ Important detail:
 
 ## Practical ISA picture for the target box
 
-For a Late 2014 2.6 GHz Haswell ULT i5-4278U, the practically relevant x64 features are:
+There are two confidence levels we should keep separate.
+
+### Explicitly confirmed by vendor pages
+
+Apple confirms the machine/SKU class only.
+
+Intel ARK for this CPU family explicitly shows these extension families on the public page:
 
 - `SSE4.1`
 - `SSE4.2`
-- `SSSE3`
-- `POPCNT`
+- `AVX2`
+- `AES-NI`
+
+Important nuance:
+
+- Intel ARK's "Instruction Set Extensions" field is abbreviated and does not enumerate every CPUID feature the compiler may care about
+- it is useful as a confirmation source, but not a complete feature dump
+
+### Strongly expected for a Haswell-class target / `x86-64-v3`
+
+`x86-64-v3` is the standard x64 CPU profile that maps to AVX2-era processors such as Haswell-class Intel CPUs.
+
+Features associated with that profile include:
+
 - `AVX`
 - `AVX2`
 - `F16C`
@@ -51,11 +69,18 @@ For a Late 2014 2.6 GHz Haswell ULT i5-4278U, the practically relevant x64 featu
 - `BMI2`
 - `LZCNT`
 - `MOVBE`
+- `POPCNT`
 
-Common Haswell crypto extensions that are also expected on this SKU:
+These are not all explicitly enumerated on the public ARK summary, but they are the reason `x86-64-v3` is the practical compiler target for this machine class.
 
-- `AES-NI`
-- `PCLMULQDQ`
+### Why this distinction matters
+
+If we wanted absolute proof of every CPUID bit, we would need a real feature dump from the organizer box itself, such as `lscpu` or `/proc/cpuinfo`.
+
+For tuning decisions today, the practical rule is:
+
+- use Intel/Apple pages for hard confirmation of the machine and major SIMD families
+- use `x86-64-v3` as the safest useful `ilc` profile for a Haswell-class AVX2 machine
 
 Features we should not target for this machine:
 
@@ -170,7 +195,7 @@ Opportunity:
 - add a generic AVX2 bulk path with tail handling
 - reduce register-to-scalar with fewer spills
 
-### 4. AES is likely available but irrelevant to the hot path today
+### 4. AES is confirmed but irrelevant to the hot path today
 
 Current state:
 
