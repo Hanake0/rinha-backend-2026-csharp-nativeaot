@@ -11,12 +11,12 @@ services:
     depends_on:
       - api1
       - api2
-    cpus: 0.15
+    cpus: 0.25
     mem_limit: 48m
     deploy:
       resources:
         limits:
-          cpus: "0.15"
+          cpus: "0.25"
           memory: 48M
 
   api1:
@@ -44,12 +44,12 @@ services:
       Runtime__Search__BoundaryRerankCount: "48"
       Runtime__Search__UseLeafRadiusPruning: "true"
       Runtime__Search__UseLastTransactionPartitionPruning: "false"
-    cpus: 0.425
+    cpus: 0.375
     mem_limit: 151m
     deploy:
       resources:
         limits:
-          cpus: "0.425"
+          cpus: "0.375"
           memory: 151M
 
   api2:
@@ -77,10 +77,10 @@ services:
       Runtime__Search__BoundaryRerankCount: "48"
       Runtime__Search__UseLeafRadiusPruning: "true"
       Runtime__Search__UseLastTransactionPartitionPruning: "false"
-    cpus: 0.425
+    cpus: 0.375
     mem_limit: 151m
     deploy:
       resources:
         limits:
-          cpus: "0.425"
+          cpus: "0.375"
           memory: 151M
