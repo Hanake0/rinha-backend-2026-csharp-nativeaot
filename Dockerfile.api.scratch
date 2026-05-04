@@ -20,8 +20,8 @@ RUN dotnet publish src/Rinha2026.Api/Rinha2026.Api.csproj \
     --self-contained true \
     -p:OptimizationPreference=Speed \
     -p:PublishAot=true \
-    -p:IlcInstructionSet=${ILC_INSTRUCTION_SET} \
-    -p:IlcMaxVectorTBitWidth=${ILC_MAX_VECTOR_T_BIT_WIDTH} \
+    -p:IlcInstructionSet="${ILC_INSTRUCTION_SET}" \
+    -p:IlcMaxVectorTBitWidth="${ILC_MAX_VECTOR_T_BIT_WIDTH}" \
     -p:StaticExecutable=true \
     -p:StripSymbols=true
 
