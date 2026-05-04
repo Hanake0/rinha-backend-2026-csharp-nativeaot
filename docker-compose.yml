@@ -19,7 +19,7 @@ services:
           memory: 48M
 
   api1:
-    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission
+    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-d5b886c
     platform: linux/amd64
     container_name: rinha2026-api1
     environment:
@@ -51,7 +51,7 @@ services:
           memory: 151M
 
   api2:
-    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission
+    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-d5b886c
     platform: linux/amd64
     container_name: rinha2026-api2
     environment:
