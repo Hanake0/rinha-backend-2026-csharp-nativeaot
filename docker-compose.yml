@@ -3,7 +3,6 @@ services:
     image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-lb:submission-v15
     pull_policy: always
     platform: linux/amd64
-    container_name: rinha2026-lb
     ports:
       - "9999:9999"
     security_opt: ["seccomp=unconfined"]
@@ -28,7 +27,6 @@ services:
     image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-v15
     pull_policy: always
     platform: linux/amd64
-    container_name: rinha2026-api1
     security_opt: ["seccomp=unconfined"]
     environment:
       ASPNETCORE_URLS: http://+:9999
@@ -60,7 +58,6 @@ services:
     image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-v15
     pull_policy: always
     platform: linux/amd64
-    container_name: rinha2026-api2
     security_opt: ["seccomp=unconfined"]
     environment:
       ASPNETCORE_URLS: http://+:9999
@@ -92,7 +89,6 @@ services:
     image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-search:submission-v15
     pull_policy: always
     platform: linux/amd64
-    container_name: rinha2026-search
     security_opt: ["seccomp=unconfined"]
     environment:
       RUNTIME_DATA_ROOT: /app/data
@@ -123,8 +119,3 @@ services:
 
 volumes:
   search-shm:
-    driver: local
-    driver_opts:
-      type: tmpfs
-      device: tmpfs
-      o: size=4m
