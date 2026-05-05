@@ -5,6 +5,10 @@ services:
     platform: linux/amd64
     security_opt:
       - seccomp=unconfined
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     ports:
       - "9999:9999"
     environment:
@@ -27,6 +31,10 @@ services:
     platform: linux/amd64
     security_opt:
       - seccomp=unconfined
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     environment:
       ASPNETCORE_URLS: http://+:9999
       API_ENGINE_COUNT: "1"
@@ -56,6 +64,10 @@ services:
     platform: linux/amd64
     security_opt:
       - seccomp=unconfined
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     environment:
       ASPNETCORE_URLS: http://+:9999
       API_ENGINE_COUNT: "1"
@@ -85,6 +97,10 @@ services:
     platform: linux/amd64
     security_opt:
       - seccomp=unconfined
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     environment:
       RUNTIME_DATA_ROOT: /app/data
       SEARCH_SERVICE_SHARED_MEMORY_DIR: /search-shm
