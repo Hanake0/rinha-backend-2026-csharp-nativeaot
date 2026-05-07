@@ -1,6 +1,6 @@
 services:
   lb:
-    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-lb:submission-v15
+    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-lb:submission-v17
     pull_policy: always
     platform: linux/amd64
     security_opt:
@@ -16,20 +16,22 @@ services:
       - "9999:9999"
     environment:
       ASPNETCORE_URLS: http://+:9999
-      BACKEND_ENDPOINTS: api1:9999;api2:9999
+      BACKEND_ENDPOINTS: unix:/sockets/api1.sock;unix:/sockets/api2.sock
       LOAD_BALANCER_MODE: IoUring
       LB_ENGINE_COUNT: "1"
     depends_on:
       - api1
       - api2
+    volumes:
+      - uds-sockets:/sockets
     deploy:
       resources:
         limits:
-          cpus: "0.15"
-          memory: "16MB"
+          cpus: "0.20"
+          memory: "30MB"
 
   api1:
-    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-v15
+    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-v17-fat
     pull_policy: always
     platform: linux/amd64
     security_opt:
@@ -42,101 +44,71 @@ services:
         soft: -1
         hard: -1
     environment:
-      ASPNETCORE_URLS: http://+:9999
       API_ENGINE_COUNT: "1"
+      API_UNIX_SOCKET_PATH: /sockets/api1.sock
       Runtime__Detection__ApprovalThreshold: "0.6"
       Runtime__Detection__TopK: "5"
+      Runtime__Dataset__IndexDirectory: /app/data/index
       Runtime__Dataset__MccRiskPath: /app/data/mcc_risk.json
       Runtime__Dataset__NormalizationPath: /app/data/normalization.json
       Runtime__Http__ParserMode: Manual
       Runtime__Http__ServerMode: IoUring
-      Runtime__Search__ExecutionMode: SharedMemoryRing
-      Runtime__Search__SharedMemoryPath: /search-shm/api1.bin
-      Runtime__Search__SharedMemoryRingCapacity: "64"
-      SEARCH_HANDOFF_SOCKET: /search-shm/handoff.sock
-    depends_on:
-      - search
-    volumes:
-      - search-shm:/search-shm
-    deploy:
-      resources:
-        limits:
-          cpus: "0.15"
-          memory: "16MB"
-
-  api2:
-    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-v15
-    pull_policy: always
-    platform: linux/amd64
-    security_opt:
-      - seccomp=unconfined
-    ulimits:
-      nofile:
-        soft: 65535
-        hard: 65535
-      memlock:
-        soft: -1
-        hard: -1
-    environment:
-      ASPNETCORE_URLS: http://+:9999
-      API_ENGINE_COUNT: "1"
-      Runtime__Detection__ApprovalThreshold: "0.6"
-      Runtime__Detection__TopK: "5"
-      Runtime__Dataset__MccRiskPath: /app/data/mcc_risk.json
-      Runtime__Dataset__NormalizationPath: /app/data/normalization.json
-      Runtime__Http__ParserMode: Manual
-      Runtime__Http__ServerMode: IoUring
-      Runtime__Search__ExecutionMode: SharedMemoryRing
-      Runtime__Search__SharedMemoryPath: /search-shm/api2.bin
-      Runtime__Search__SharedMemoryRingCapacity: "64"
-      SEARCH_HANDOFF_SOCKET: /search-shm/handoff.sock
-    depends_on:
-      - search
-    volumes:
-      - search-shm:/search-shm
-    deploy:
-      resources:
-        limits:
-          cpus: "0.15"
-          memory: "16MB"
-
-  search:
-    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-search:submission-v15
-    pull_policy: always
-    platform: linux/amd64
-    security_opt:
-      - seccomp=unconfined
-    ulimits:
-      nofile:
-        soft: 65535
-        hard: 65535
-      memlock:
-        soft: -1
-        hard: -1
-    environment:
-      RUNTIME_DATA_ROOT: /app/data
-      SEARCH_SERVICE_SHARED_MEMORY_DIR: /search-shm
-      SEARCH_SERVICE_SHARED_MEMORY_RING_CAPACITY: "64"
-      SEARCH_SERVICE_HANDOFF_SOCKET: /search-shm/handoff.sock
-      SEARCH_SERVICE_HANDOFF_WAIT_MS: "10000"
-      SEARCH_SERVICE_WORKERS: "1"
-      Runtime__Detection__ApprovalThreshold: "0.6"
-      Runtime__Detection__TopK: "5"
+      Runtime__Search__ExecutionMode: Local
+      Runtime__Search__IndexStorageMode: MemoryMapped
       Runtime__Search__BeamLevel1: "8"
       Runtime__Search__BeamLevel2: "128"
       Runtime__Search__BoundaryBeamLevel2: "0"
-      Runtime__Search__IndexStorageMode: Resident
       Runtime__Search__RerankCount: "48"
       Runtime__Search__BoundaryRerankCount: "48"
       Runtime__Search__UseLeafRadiusPruning: "true"
       Runtime__Search__UseLastTransactionPartitionPruning: "false"
     volumes:
-      - search-shm:/search-shm
+      - uds-sockets:/sockets
     deploy:
       resources:
         limits:
-          cpus: "0.55"
-          memory: "302MB"
+          cpus: "0.40"
+          memory: "160MB"
+
+  api2:
+    image: ghcr.io/hanake0/rinha-backend-2026-csharp-nativeaot-api:submission-v17-fat
+    pull_policy: always
+    platform: linux/amd64
+    security_opt:
+      - seccomp=unconfined
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    environment:
+      API_ENGINE_COUNT: "1"
+      API_UNIX_SOCKET_PATH: /sockets/api2.sock
+      Runtime__Detection__ApprovalThreshold: "0.6"
+      Runtime__Detection__TopK: "5"
+      Runtime__Dataset__IndexDirectory: /app/data/index
+      Runtime__Dataset__MccRiskPath: /app/data/mcc_risk.json
+      Runtime__Dataset__NormalizationPath: /app/data/normalization.json
+      Runtime__Http__ParserMode: Manual
+      Runtime__Http__ServerMode: IoUring
+      Runtime__Search__ExecutionMode: Local
+      Runtime__Search__IndexStorageMode: MemoryMapped
+      Runtime__Search__BeamLevel1: "8"
+      Runtime__Search__BeamLevel2: "128"
+      Runtime__Search__BoundaryBeamLevel2: "0"
+      Runtime__Search__RerankCount: "48"
+      Runtime__Search__BoundaryRerankCount: "48"
+      Runtime__Search__UseLeafRadiusPruning: "true"
+      Runtime__Search__UseLastTransactionPartitionPruning: "false"
+    volumes:
+      - uds-sockets:/sockets
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: "160MB"
 
 volumes:
-  search-shm:
+  uds-sockets:
