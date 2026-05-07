@@ -6,6 +6,9 @@ services:
     security_opt:
       - seccomp=unconfined
     ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
       memlock:
         soft: -1
         hard: -1
@@ -32,6 +35,9 @@ services:
     security_opt:
       - seccomp=unconfined
     ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
       memlock:
         soft: -1
         hard: -1
@@ -65,6 +71,9 @@ services:
     security_opt:
       - seccomp=unconfined
     ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
       memlock:
         soft: -1
         hard: -1
@@ -98,6 +107,9 @@ services:
     security_opt:
       - seccomp=unconfined
     ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
       memlock:
         soft: -1
         hard: -1
